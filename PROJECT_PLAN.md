@@ -228,6 +228,15 @@ These interactive/UX features have been built on top of the core app.
   message and can be toggled off.
 - **Toast confirmations** — small pop-ups confirm actions like "Copied to
   clipboard", new chat, and feedback.
+- **Token / usage counter** — each message shows an estimated token count
+  (~4 chars per token) and the header shows the conversation's running total,
+  so you can see how big replies and chats are getting.
+- **Auto-scroll toggle + "new messages" indicator** — choose whether the view
+  follows new text (Settings). With it off, a "New messages" button appears when
+  replies arrive while you've scrolled up.
+- **Conversation tags** — label chats with tags (the tag button on each chat),
+  see them as chips in the sidebar, and filter the list by clicking a tag in the
+  filter bar (works together with search).
 - **Responsive design** — adapts to phones, tablets, and large screens:
   - On phones the app goes full-screen and the sidebar becomes a slide-in
     drawer with a tap-away backdrop (auto-closes when you pick/create a chat).

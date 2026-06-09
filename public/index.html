@@ -18,6 +18,7 @@
           placeholder="Search chats..."
           autocomplete="off"
         />
+        <div id="tag-filter" class="tag-filter"></div>
         <div id="convo-list" class="convo-list"></div>
         <button id="open-settings" class="settings-btn">Settings</button>
       </aside>
@@ -32,6 +33,7 @@
           </button>
           <div class="status-dot"></div>
           <h1 id="convo-title">AI Chatbot</h1>
+          <span id="usage" class="usage hidden" title="Estimated tokens in this conversation"></span>
           <div class="header-actions">
             <select id="model-picker" class="model-picker" title="Choose AI model"></select>
             <div class="export-wrap">
@@ -111,6 +113,11 @@
 
         <label>Accent color</label>
         <div id="accent-row" class="accent-row"></div>
+
+        <label class="toggle-row">
+          <input type="checkbox" id="auto-scroll" />
+          Auto-scroll to newest message
+        </label>
 
         <label class="toggle-row">
           <input type="checkbox" id="read-aloud" />

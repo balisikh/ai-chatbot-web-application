@@ -36,6 +36,9 @@ const tempValueEl = document.getElementById("temp-value");
 const maxLengthSelect = document.getElementById("max-length");
 const themeSelect = document.getElementById("theme-select");
 const accentRow = document.getElementById("accent-row");
+const autoScrollInput = document.getElementById("auto-scroll");
+const usageEl = document.getElementById("usage");
+const tagFilterEl = document.getElementById("tag-filter");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -88,6 +91,7 @@ let settings = Object.assign(
     preset: "Default assistant",
     theme: localStorage.getItem(THEME_KEY) || "dark",
     accent: "",
+    autoScroll: true,
   },
   loadJSON(SETTINGS_KEY, {})
 );
@@ -96,6 +100,7 @@ let currentController = null;
 let isGenerating = false;
 let searchQuery = "";
 let pendingAttachment = null;
+let activeTag = null;
 
 // --- Storage helpers ------------------------------------------------------
 function loadJSON(key, fallback) {
@@ -127,6 +132,7 @@ function newConversation() {
     title: "New chat",
     messages: [],
     pinned: false,
+    tags: [],
     createdAt: new Date().toISOString(),
   };
   conversations.unshift(convo);
@@ -325,6 +331,10 @@ function formatTime(iso) {
   const d = iso ? new Date(iso) : new Date();
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+// Rough token estimate (~4 characters per token, the common rule of thumb).
+function estimateTokens(text) {
+  return Math.max(1, Math.round((text || "").length / 4));
+}
 function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -392,6 +402,14 @@ function addMessage(role, text, opts = {}) {
   stamp.className = "timestamp";
   stamp.textContent = formatTime(opts.time);
   meta.appendChild(stamp);
+
+  if (opts.tokens) {
+    const tok = document.createElement("span");
+    tok.className = "timestamp token-count";
+    tok.textContent = `~${opts.tokens} tok`;
+    tok.title = "Estimated tokens";
+    meta.appendChild(tok);
+  }
 
   if (role === "user" && opts.onEdit) {
     meta.appendChild(makeMetaButton("Edit", "Edit & resend", opts.onEdit));
@@ -479,12 +497,14 @@ function renderConversation() {
       addMessage("user", msg.display || msg.content, {
         time: msg.t,
         file: msg.file,
+        tokens: estimateTokens(msg.content),
         onEdit: () => editMessage(i),
       });
     } else {
       addMessage("bot", msg.content, {
         time: msg.t,
         error: msg.error,
+        tokens: msg.error ? 0 : estimateTokens(msg.content),
         onRetry: msg.error && !isGenerating ? regenerate : undefined,
         onRegenerate:
           !msg.error && i === lastAssistant && !isGenerating ? regenerate : undefined,
@@ -493,26 +513,77 @@ function renderConversation() {
       });
     }
   });
+  updateUsage();
   scrollToBottom();
 }
 
+function updateUsage() {
+  const convo = getActive();
+  const total = convo.messages.reduce(
+    (sum, m) => sum + estimateTokens(m.content),
+    0
+  );
+  if (total > 0) {
+    usageEl.textContent = `\u2248 ${total.toLocaleString()} tokens`;
+    usageEl.classList.remove("hidden");
+  } else {
+    usageEl.classList.add("hidden");
+  }
+}
+
+function allTags() {
+  const set = new Set();
+  conversations.forEach((c) => (c.tags || []).forEach((t) => set.add(t)));
+  return [...set].sort();
+}
+
+function renderTagFilter() {
+  tagFilterEl.innerHTML = "";
+  const tags = allTags();
+  if (tags.length === 0) {
+    if (activeTag) activeTag = null;
+    tagFilterEl.classList.add("hidden");
+    return;
+  }
+  tagFilterEl.classList.remove("hidden");
+  const mk = (label, value) => {
+    const chip = document.createElement("button");
+    chip.className = "tag-chip" + (activeTag === value ? " active" : "");
+    chip.textContent = label;
+    chip.addEventListener("click", () => {
+      activeTag = value;
+      renderSidebar();
+    });
+    tagFilterEl.appendChild(chip);
+  };
+  mk("All", null);
+  tags.forEach((t) => mk("#" + t, t));
+}
+
 function renderSidebar() {
+  renderTagFilter();
   convoListEl.innerHTML = "";
-  const sorted = [...conversations].sort(
+  let list = [...conversations].sort(
     (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
   );
-  const filtered = searchQuery
-    ? sorted.filter((c) => {
-        if ((c.title || "").toLowerCase().includes(searchQuery)) return true;
-        return c.messages.some((m) =>
-          (m.display || m.content || "").toLowerCase().includes(searchQuery)
-        );
-      })
-    : sorted;
+  if (activeTag) list = list.filter((c) => (c.tags || []).includes(activeTag));
+  if (searchQuery) {
+    list = list.filter((c) => {
+      if ((c.title || "").toLowerCase().includes(searchQuery)) return true;
+      if ((c.tags || []).some((t) => t.toLowerCase().includes(searchQuery)))
+        return true;
+      return c.messages.some((m) =>
+        (m.display || m.content || "").toLowerCase().includes(searchQuery)
+      );
+    });
+  }
 
-  for (const convo of filtered) {
+  for (const convo of list) {
     const item = document.createElement("div");
     item.className = "convo-item" + (convo.id === activeId ? " active" : "");
+
+    const row = document.createElement("div");
+    row.className = "convo-row";
 
     const pin = document.createElement("button");
     pin.className = "convo-pin" + (convo.pinned ? " pinned" : "");
@@ -530,6 +601,15 @@ function renderSidebar() {
     title.textContent = convo.title || "New chat";
     title.title = "Click to open";
     title.addEventListener("click", () => switchConversation(convo.id));
+
+    const tagBtn = document.createElement("button");
+    tagBtn.className = "convo-tag-btn";
+    tagBtn.textContent = "\u{1F3F7}";
+    tagBtn.title = "Edit tags";
+    tagBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startTagEdit(convo, item);
+    });
 
     const rename = document.createElement("button");
     rename.className = "convo-rename";
@@ -549,12 +629,55 @@ function renderSidebar() {
       deleteConversation(convo.id);
     });
 
-    item.appendChild(pin);
-    item.appendChild(title);
-    item.appendChild(rename);
-    item.appendChild(del);
+    row.appendChild(pin);
+    row.appendChild(title);
+    row.appendChild(tagBtn);
+    row.appendChild(rename);
+    row.appendChild(del);
+    item.appendChild(row);
+
+    if ((convo.tags || []).length) {
+      const tagsRow = document.createElement("div");
+      tagsRow.className = "convo-tags";
+      convo.tags.forEach((t) => {
+        const chip = document.createElement("span");
+        chip.className = "convo-tag";
+        chip.textContent = "#" + t;
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          activeTag = t;
+          renderSidebar();
+        });
+        tagsRow.appendChild(chip);
+      });
+      item.appendChild(tagsRow);
+    }
+
     convoListEl.appendChild(item);
   }
+}
+
+function startTagEdit(convo, item) {
+  if (item.querySelector(".tag-editor")) return;
+  const editor = document.createElement("input");
+  editor.className = "tag-editor";
+  editor.value = (convo.tags || []).join(", ");
+  editor.placeholder = "tags, comma, separated";
+  item.appendChild(editor);
+  editor.focus();
+  const commit = () => {
+    convo.tags = editor.value
+      .split(",")
+      .map((t) => t.trim().replace(/^#/, "").toLowerCase())
+      .filter((t, i, arr) => t && arr.indexOf(t) === i);
+    saveConvos();
+    renderSidebar();
+  };
+  editor.addEventListener("blur", commit);
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") editor.blur();
+    if (e.key === "Escape") renderSidebar();
+  });
 }
 
 function startRename(convo, titleEl) {
@@ -747,6 +870,7 @@ function openSettings() {
   maxLengthSelect.value = String(settings.maxTokens ?? 512);
   themeSelect.value = settings.theme || "dark";
   markSelectedAccent();
+  autoScrollInput.checked = settings.autoScroll !== false;
   readAloudInput.checked = !!settings.readAloud;
   settingsModal.classList.remove("hidden");
 }
@@ -770,6 +894,7 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.systemPrompt = systemPromptInput.value.trim();
   settings.temperature = parseFloat(temperatureInput.value);
   settings.maxTokens = parseInt(maxLengthSelect.value, 10) || 0;
+  settings.autoScroll = autoScrollInput.checked;
   settings.readAloud = readAloudInput.checked;
   saveSettings();
   closeSettings();
@@ -781,6 +906,7 @@ resetSettingsBtn.addEventListener("click", () => {
   tempValueEl.textContent = "0.7";
   maxLengthSelect.value = "512";
   themeSelect.value = "dark";
+  autoScrollInput.checked = true;
   readAloudInput.checked = false;
   settings.accent = "";
   applyAccent("");
@@ -941,11 +1067,28 @@ function speak(text) {
   window.speechSynthesis.speak(new SpeechSynthesisUtterance(toPlainText(text)));
 }
 
-// --- Scroll-to-bottom -----------------------------------------------------
+// --- Scroll-to-bottom + new-messages indicator ----------------------------
+function markNewMessages() {
+  scrollBottomBtn.classList.remove("hidden");
+  scrollBottomBtn.classList.add("new");
+  scrollBottomBtn.textContent = "New messages \u2193";
+}
+function clearNewMessages() {
+  scrollBottomBtn.classList.remove("new");
+  scrollBottomBtn.textContent = "\u2193";
+}
 messagesEl.addEventListener("scroll", () => {
-  scrollBottomBtn.classList.toggle("hidden", nearBottom());
+  if (nearBottom()) {
+    scrollBottomBtn.classList.add("hidden");
+    clearNewMessages();
+  } else {
+    scrollBottomBtn.classList.remove("hidden");
+  }
 });
-scrollBottomBtn.addEventListener("click", scrollToBottom);
+scrollBottomBtn.addEventListener("click", () => {
+  clearNewMessages();
+  scrollToBottom();
+});
 
 // --- Input behavior -------------------------------------------------------
 function updateCounter() {
@@ -1040,7 +1183,8 @@ async function generateReply() {
       bubble.innerHTML = renderMarkdown(full);
       bubble.dataset.raw = full;
       enhanceCodeBlocks(bubble);
-      if (nearBottom()) scrollToBottom();
+      if (settings.autoScroll) scrollToBottom();
+      else if (!nearBottom()) markNewMessages();
     }
   } catch (err) {
     if (err.name === "AbortError") aborted = true;
