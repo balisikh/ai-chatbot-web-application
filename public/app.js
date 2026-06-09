@@ -814,6 +814,23 @@ function download(filename, text, mime) {
   URL.revokeObjectURL(url);
 }
 function exportConversation(format) {
+  if (format === "all") {
+    const stamp = new Date().toISOString().slice(0, 10);
+    const backup = {
+      type: "ai-chatbot-backup",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: conversations.length,
+      conversations,
+    };
+    download(
+      `ai-chat-backup-${stamp}.json`,
+      JSON.stringify(backup, null, 2),
+      "application/json"
+    );
+    showToast(`Exported all ${conversations.length} chats`);
+    return;
+  }
   const convo = getActive();
   const safe = (convo.title || "chat").replace(/[^a-z0-9-_]+/gi, "_");
   if (format === "json") {

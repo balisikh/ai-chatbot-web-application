@@ -196,7 +196,9 @@ These interactive/UX features have been built on top of the core app.
 - **Response length control** — Short / Medium / Long / Unlimited cap on reply
   size (mapped to `max_tokens` / Ollama `num_predict`).
 - **Export chat** — download the active conversation as `.md`, `.txt`, or
-  `.json` from the header Export menu.
+  `.json` from the header Export menu, plus an **"All chats: backup (.json)"**
+  option that bundles every conversation into one dated backup file
+  (`ai-chat-backup-YYYY-MM-DD.json`).
 - **Rename conversations** — pencil button on each sidebar item for inline
   editing of the title.
 - **Pin / favorite conversations** — star button keeps important chats sorted
