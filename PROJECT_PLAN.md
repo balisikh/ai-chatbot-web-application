@@ -179,7 +179,11 @@ These interactive/UX features have been built on top of the core app.
   (auto-detected via the `/api/models` endpoint) and lets the user choose.
 - **Voice input (speech-to-text)** — a mic button dictates a message and
   auto-sends it (browser Web Speech API; hidden if unsupported).
-- **Read-aloud (text-to-speech)** — optional spoken replies (toggle in Settings).
+- **Read-aloud (text-to-speech)** — optional auto-spoken replies (toggle in
+  Settings), plus a per-reply speaker button (\u{1F50A}) to read any message on
+  demand and click again to stop. Settings also include a **voice picker**
+  (from the voices installed on your system) and a **speaking-speed slider**
+  (0.5x–2x), applied to both auto and on-demand speech.
 - **Syntax highlighting + copy-code** — color-coded code blocks, each with its
   own copy button.
 - **Regenerate** — re-roll the most recent AI reply.

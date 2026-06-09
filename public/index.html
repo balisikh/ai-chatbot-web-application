@@ -125,6 +125,16 @@
           Read replies aloud
         </label>
 
+        <div id="tts-controls">
+          <label for="voice-select">Voice</label>
+          <select id="voice-select" class="settings-input"></select>
+
+          <label for="speech-rate">
+            Speaking speed: <span id="rate-value">1.0</span>x
+          </label>
+          <input id="speech-rate" type="range" min="0.5" max="2" step="0.1" value="1" />
+        </div>
+
         <div class="modal-actions">
           <button id="reset-settings" class="icon-btn">Reset</button>
           <button id="save-settings" class="send-btn">Save</button>

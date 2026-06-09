@@ -39,6 +39,10 @@ const accentRow = document.getElementById("accent-row");
 const autoScrollInput = document.getElementById("auto-scroll");
 const usageEl = document.getElementById("usage");
 const tagFilterEl = document.getElementById("tag-filter");
+const voiceSelect = document.getElementById("voice-select");
+const speechRateInput = document.getElementById("speech-rate");
+const rateValueEl = document.getElementById("rate-value");
+const ttsControls = document.getElementById("tts-controls");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -92,6 +96,8 @@ let settings = Object.assign(
     theme: localStorage.getItem(THEME_KEY) || "dark",
     accent: "",
     autoScroll: true,
+    voiceName: "",
+    speechRate: 1,
   },
   loadJSON(SETTINGS_KEY, {})
 );
@@ -425,6 +431,9 @@ function addMessage(role, text, opts = {}) {
         }
       })
     );
+    if (!opts.error && (text || "").trim() && window.speechSynthesis) {
+      meta.appendChild(makeSpeakButton(text));
+    }
     if (opts.onRetry) {
       const r = makeMetaButton("Retry", "Try again", opts.onRetry);
       r.classList.add("retry-btn");
@@ -889,6 +898,9 @@ function openSettings() {
   markSelectedAccent();
   autoScrollInput.checked = settings.autoScroll !== false;
   readAloudInput.checked = !!settings.readAloud;
+  populateVoices();
+  speechRateInput.value = String(settings.speechRate || 1);
+  rateValueEl.textContent = Number(settings.speechRate || 1).toFixed(1);
   settingsModal.classList.remove("hidden");
 }
 function closeSettings() {
@@ -906,6 +918,12 @@ systemPromptInput.addEventListener("input", () => {
 temperatureInput.addEventListener("input", () => {
   tempValueEl.textContent = temperatureInput.value;
 });
+speechRateInput.addEventListener("input", () => {
+  rateValueEl.textContent = Number(speechRateInput.value).toFixed(1);
+});
+if (window.speechSynthesis) {
+  window.speechSynthesis.addEventListener("voiceschanged", populateVoices);
+}
 saveSettingsBtn.addEventListener("click", () => {
   settings.preset = presetSelect.value;
   settings.systemPrompt = systemPromptInput.value.trim();
@@ -913,6 +931,8 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.maxTokens = parseInt(maxLengthSelect.value, 10) || 0;
   settings.autoScroll = autoScrollInput.checked;
   settings.readAloud = readAloudInput.checked;
+  settings.voiceName = voiceSelect.value;
+  settings.speechRate = parseFloat(speechRateInput.value) || 1;
   saveSettings();
   closeSettings();
 });
@@ -925,6 +945,9 @@ resetSettingsBtn.addEventListener("click", () => {
   themeSelect.value = "dark";
   autoScrollInput.checked = true;
   readAloudInput.checked = false;
+  voiceSelect.value = "";
+  speechRateInput.value = "1";
+  rateValueEl.textContent = "1.0";
   settings.accent = "";
   applyAccent("");
   applyTheme("dark");
@@ -1078,10 +1101,86 @@ if (SpeechRecognition) {
 }
 
 // --- Read aloud -----------------------------------------------------------
+function applyVoiceSettings(utter) {
+  utter.rate = settings.speechRate || 1;
+  if (settings.voiceName && window.speechSynthesis) {
+    const v = window.speechSynthesis
+      .getVoices()
+      .find((x) => x.name === settings.voiceName);
+    if (v) {
+      try {
+        utter.voice = v;
+      } catch {
+        /* ignore unsupported voice objects */
+      }
+    }
+  }
+}
+function populateVoices() {
+  if (!window.speechSynthesis) {
+    if (ttsControls) ttsControls.style.display = "none";
+    return;
+  }
+  const voices = window.speechSynthesis.getVoices();
+  voiceSelect.innerHTML = "";
+  const def = document.createElement("option");
+  def.value = "";
+  def.textContent = "Default voice";
+  voiceSelect.appendChild(def);
+  voices.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v.name;
+    o.textContent = `${v.name} (${v.lang})`;
+    voiceSelect.appendChild(o);
+  });
+  if (settings.voiceName) voiceSelect.value = settings.voiceName;
+}
 function speak(text) {
   if (!settings.readAloud || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(toPlainText(text)));
+  const u = new SpeechSynthesisUtterance(toPlainText(text));
+  applyVoiceSettings(u);
+  window.speechSynthesis.speak(u);
+}
+
+let speakingBtn = null;
+function resetSpeakBtn(btn) {
+  btn.textContent = "\u{1F50A}";
+  btn.title = "Read this reply aloud";
+  btn.classList.remove("active");
+}
+function makeSpeakButton(text) {
+  const btn = document.createElement("button");
+  btn.className = "meta-btn speak-btn";
+  resetSpeakBtn(btn);
+  btn.addEventListener("click", () => {
+    if (!window.speechSynthesis) {
+      showToast("Speech isn't supported in this browser");
+      return;
+    }
+    const wasThis = speakingBtn === btn;
+    window.speechSynthesis.cancel();
+    if (speakingBtn) {
+      resetSpeakBtn(speakingBtn);
+      speakingBtn = null;
+    }
+    if (wasThis) return; // second click = stop
+    const u = new SpeechSynthesisUtterance(toPlainText(text));
+    applyVoiceSettings(u);
+    u.onend = () => {
+      if (speakingBtn === btn) {
+        resetSpeakBtn(btn);
+        speakingBtn = null;
+      }
+    };
+    u.onerror = u.onend;
+    window.speechSynthesis.speak(u);
+    speakingBtn = btn;
+    btn.textContent = "\u23F9";
+    btn.title = "Stop";
+    btn.classList.add("active");
+  });
+  return btn;
 }
 
 // --- Scroll-to-bottom + new-messages indicator ----------------------------
