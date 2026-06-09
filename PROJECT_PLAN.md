@@ -211,6 +211,14 @@ These interactive/UX features have been built on top of the core app.
 - **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
   Solar, Rose) selectable in Settings or by cycling with the header button, plus
   a custom accent-color picker. Choices persist between visits.
+- **Responsive design** — adapts to phones, tablets, and large screens:
+  - On phones the app goes full-screen and the sidebar becomes a slide-in
+    drawer with a tap-away backdrop (auto-closes when you pick/create a chat).
+  - The header shrinks gracefully (smaller controls, title truncates) and the
+    decorative status dot hides on very small screens.
+  - Uses dynamic viewport height (`dvh`) so mobile browser bars don't clip the
+    input, 16px input font to stop iOS zoom-on-focus, wider layout on large
+    monitors, and respects `prefers-reduced-motion`.
 
 ### Backend support added across batches
 

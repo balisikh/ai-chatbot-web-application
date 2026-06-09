@@ -18,6 +18,7 @@ const attachmentEl = document.getElementById("attachment");
 const attachmentNameEl = document.getElementById("attachment-name");
 const attachmentRemoveBtn = document.getElementById("attachment-remove");
 const scrollBottomBtn = document.getElementById("scroll-bottom");
+const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 const searchInput = document.getElementById("search");
 const exportBtn = document.getElementById("export-btn");
 const exportMenu = document.getElementById("export-menu");
@@ -157,6 +158,7 @@ function switchConversation(id) {
   localStorage.setItem(ACTIVE_KEY, id);
   renderSidebar();
   renderConversation();
+  if (isMobile()) closeMobileSidebar();
 }
 function maybeAutoTitle(convo, firstText) {
   if (convo.title === "New chat" && firstText) {
@@ -556,18 +558,32 @@ function markSelectedAccent() {
 }
 
 // --- Sidebar toggle / new chat / search -----------------------------------
+function isMobile() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+function openMobileSidebar() {
+  sidebar.classList.add("open");
+  sidebarBackdrop.classList.remove("hidden");
+}
+function closeMobileSidebar() {
+  sidebar.classList.remove("open");
+  sidebarBackdrop.classList.add("hidden");
+}
 toggleSidebarBtn.addEventListener("click", () => {
-  if (window.matchMedia("(max-width: 720px)").matches) {
-    sidebar.classList.toggle("open");
+  if (isMobile()) {
+    if (sidebar.classList.contains("open")) closeMobileSidebar();
+    else openMobileSidebar();
   } else {
     appEl.classList.toggle("sidebar-collapsed");
   }
 });
+sidebarBackdrop.addEventListener("click", closeMobileSidebar);
 newConvoBtn.addEventListener("click", () => {
   if (isGenerating && currentController) currentController.abort();
   newConversation();
   renderSidebar();
   renderConversation();
+  if (isMobile()) closeMobileSidebar();
   input.focus();
 });
 searchInput.addEventListener("input", () => {

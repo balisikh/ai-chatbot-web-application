@@ -103,6 +103,7 @@ body {
   background: var(--page-bg);
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -110,6 +111,7 @@ body {
 }
 
 .app {
+  position: relative;
   width: 100%;
   max-width: 960px;
   height: 90vh;
@@ -117,6 +119,18 @@ body {
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+/* Backdrop behind the mobile sidebar drawer */
+.sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 35;
+  border: none;
+}
+.sidebar-backdrop.hidden {
+  display: none;
 }
 
 /* --- Sidebar --- */
@@ -256,6 +270,8 @@ body {
 .chat-header h1 {
   font-size: 1.05rem;
   font-weight: 600;
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -641,6 +657,7 @@ body {
 }
 .input {
   flex: 1;
+  min-width: 0;
   resize: none;
   border: 1px solid var(--border);
   background: var(--input-bg);
@@ -776,15 +793,122 @@ select.settings-input {
 }
 
 /* Responsive: collapse sidebar on small screens */
+/* --- Large screens: use more space --- */
+@media (min-width: 1500px) {
+  .app {
+    max-width: 1200px;
+    height: 88vh;
+  }
+}
+
+/* --- Tablets --- */
+@media (max-width: 960px) {
+  body {
+    padding: 8px;
+  }
+  .sidebar {
+    width: 220px;
+  }
+}
+
+/* --- Phones: full-screen app + sidebar drawer --- */
 @media (max-width: 720px) {
+  body {
+    padding: 0;
+  }
+  .app {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+  }
   .sidebar {
     position: absolute;
+    top: 0;
+    left: 0;
+    width: 80%;
+    max-width: 300px;
     z-index: 40;
     height: 100%;
     transform: translateX(-100%);
-    transition: transform 0.25s;
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
   }
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  .chat-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .chat-header h1 {
+    font-size: 0.95rem;
+  }
+  .header-actions {
+    gap: 6px;
+  }
+  .icon-btn {
+    padding: 6px 8px;
+    font-size: 0.8rem;
+  }
+  .model-picker {
+    max-width: 110px;
+    font-size: 0.75rem;
+  }
+  .export-menu {
+    min-width: 150px;
+  }
+
+  .messages {
+    padding: 14px;
+    gap: 12px;
+  }
+  .message {
+    max-width: 92%;
+  }
+
+  .chat-form {
+    padding: 10px;
+    gap: 6px;
+  }
+  .mic-btn {
+    padding: 0 12px;
+    font-size: 1rem;
+  }
+  .send-btn {
+    padding: 0 16px;
+  }
+  .input {
+    padding: 11px 12px;
+    font-size: 16px; /* prevents iOS zoom-on-focus */
+  }
+}
+
+/* --- Small phones --- */
+@media (max-width: 460px) {
+  .status-dot {
+    display: none;
+  }
+  .model-picker {
+    max-width: 84px;
+  }
+  .icon-btn {
+    padding: 6px 7px;
+    font-size: 0.75rem;
+  }
+  .convo-pin,
+  .convo-rename,
+  .convo-del {
+    font-size: 1rem;
+    padding: 4px;
+  }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
   }
 }
