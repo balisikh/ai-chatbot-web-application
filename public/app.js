@@ -432,7 +432,7 @@ function addMessage(role, text, opts = {}) {
       })
     );
     if (!opts.error && (text || "").trim() && window.speechSynthesis) {
-      meta.appendChild(makeSpeakButton(text));
+      meta.appendChild(makeSpeakButton(() => bubble.dataset.raw || text));
     }
     if (opts.onRetry) {
       const r = makeMetaButton("Retry", "Try again", opts.onRetry);
@@ -1110,11 +1110,43 @@ function applyVoiceSettings(utter) {
     if (v) {
       try {
         utter.voice = v;
+        utter.lang = v.lang || utter.lang;
       } catch {
         /* ignore unsupported voice objects */
       }
     }
   }
+}
+// Chrome/Edge often ignore speak() if it runs in the same tick as cancel().
+function playSpeech(text, { onStart, onEnd } = {}) {
+  if (!window.speechSynthesis) {
+    showToast("Speech isn't supported in this browser");
+    onEnd?.();
+    return;
+  }
+  const plain = toPlainText(text || "").trim();
+  if (!plain) {
+    showToast("Nothing to read aloud");
+    onEnd?.();
+    return;
+  }
+  window.speechSynthesis.getVoices(); // prime voice list (required in some browsers)
+  window.speechSynthesis.cancel();
+  setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(plain);
+    applyVoiceSettings(u);
+    u.onstart = () => onStart?.();
+    const finish = () => onEnd?.();
+    u.onend = finish;
+    u.onerror = (e) => {
+      if (e.error !== "interrupted" && e.error !== "canceled") {
+        showToast("Could not play speech — try Default voice in Settings");
+      }
+      finish();
+    };
+    window.speechSynthesis.speak(u);
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  }, 80);
 }
 function populateVoices() {
   if (!window.speechSynthesis) {
@@ -1137,10 +1169,7 @@ function populateVoices() {
 }
 function speak(text) {
   if (!settings.readAloud || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(toPlainText(text));
-  applyVoiceSettings(u);
-  window.speechSynthesis.speak(u);
+  playSpeech(text);
 }
 
 let speakingBtn = null;
@@ -1149,36 +1178,32 @@ function resetSpeakBtn(btn) {
   btn.title = "Read this reply aloud";
   btn.classList.remove("active");
 }
-function makeSpeakButton(text) {
+function makeSpeakButton(getText) {
   const btn = document.createElement("button");
   btn.className = "meta-btn speak-btn";
   resetSpeakBtn(btn);
   btn.addEventListener("click", () => {
-    if (!window.speechSynthesis) {
-      showToast("Speech isn't supported in this browser");
-      return;
-    }
     const wasThis = speakingBtn === btn;
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
     if (speakingBtn) {
       resetSpeakBtn(speakingBtn);
       speakingBtn = null;
     }
     if (wasThis) return; // second click = stop
-    const u = new SpeechSynthesisUtterance(toPlainText(text));
-    applyVoiceSettings(u);
-    u.onend = () => {
-      if (speakingBtn === btn) {
-        resetSpeakBtn(btn);
-        speakingBtn = null;
-      }
-    };
-    u.onerror = u.onend;
-    window.speechSynthesis.speak(u);
-    speakingBtn = btn;
-    btn.textContent = "\u23F9";
-    btn.title = "Stop";
-    btn.classList.add("active");
+    playSpeech(getText(), {
+      onStart: () => {
+        speakingBtn = btn;
+        btn.textContent = "\u23F9";
+        btn.title = "Stop";
+        btn.classList.add("active");
+      },
+      onEnd: () => {
+        if (speakingBtn === btn) {
+          resetSpeakBtn(btn);
+          speakingBtn = null;
+        }
+      },
+    });
   });
   return btn;
 }
@@ -1447,6 +1472,7 @@ applyTheme(settings.theme || "dark");
 applyAccent(settings.accent || "");
 populateThemeControls();
 populatePresets();
+if (window.speechSynthesis) populateVoices();
 if (conversations.length === 0) newConversation();
 renderSidebar();
 renderConversation();
