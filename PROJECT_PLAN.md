@@ -211,6 +211,9 @@ These interactive/UX features have been built on top of the core app.
 - **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
   Solar, Rose) selectable in Settings or by cycling with the header button, plus
   a custom accent-color picker. Choices persist between visits.
+- **Word / character counter** — a small live count under the input box that
+  appears as you type (with a soft warning past ~4000 characters) and hides
+  when the box is empty.
 - **Responsive design** — adapts to phones, tablets, and large screens:
   - On phones the app goes full-screen and the sidebar becomes a slide-in
     drawer with a tap-away backdrop (auto-closes when you pick/create a chat).

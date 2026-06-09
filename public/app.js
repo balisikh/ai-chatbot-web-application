@@ -19,6 +19,7 @@ const attachmentNameEl = document.getElementById("attachment-name");
 const attachmentRemoveBtn = document.getElementById("attachment-remove");
 const scrollBottomBtn = document.getElementById("scroll-bottom");
 const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+const charCounter = document.getElementById("char-counter");
 const searchInput = document.getElementById("search");
 const exportBtn = document.getElementById("export-btn");
 const exportMenu = document.getElementById("export-menu");
@@ -807,9 +808,22 @@ messagesEl.addEventListener("scroll", () => {
 scrollBottomBtn.addEventListener("click", scrollToBottom);
 
 // --- Input behavior -------------------------------------------------------
+function updateCounter() {
+  const text = input.value;
+  const chars = text.length;
+  if (chars === 0) {
+    charCounter.classList.add("hidden");
+    return;
+  }
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  charCounter.textContent = `${words} word${words === 1 ? "" : "s"} \u00B7 ${chars} character${chars === 1 ? "" : "s"}`;
+  charCounter.classList.toggle("warn", chars > 4000);
+  charCounter.classList.remove("hidden");
+}
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = input.scrollHeight + "px";
+  updateCounter();
 });
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -943,6 +957,7 @@ form.addEventListener("submit", async (e) => {
 
   input.value = "";
   input.style.height = "auto";
+  updateCounter();
   clearAttachment();
 
   await generateReply();
