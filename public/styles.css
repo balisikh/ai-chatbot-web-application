@@ -791,7 +791,7 @@ body {
   border-radius: 14px;
   padding: 22px;
   width: 100%;
-  max-width: 440px;
+  max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
   display: flex;
@@ -846,6 +846,8 @@ select.settings-input {
 }
 .settings-input {
   width: 100%;
+  display: block;
+  box-sizing: border-box;
   resize: vertical;
   border: 1px solid var(--border);
   background: var(--input-bg);
@@ -854,6 +856,10 @@ select.settings-input {
   padding: 10px;
   font-size: 0.9rem;
   font-family: inherit;
+}
+textarea#system-prompt {
+  min-height: 110px;
+  line-height: 1.5;
 }
 .toggle-row {
   display: flex;
