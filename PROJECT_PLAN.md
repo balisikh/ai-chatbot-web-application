@@ -208,6 +208,9 @@ These interactive/UX features have been built on top of the core app.
 - **File/document upload** — attach a text-based file (`.txt`, `.md`, `.csv`,
   `.json`, code, etc.); its contents are sent as context so you can ask
   questions about it (large files are truncated to keep within the context).
+- **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
+  Solar, Rose) selectable in Settings or by cycling with the header button, plus
+  a custom accent-color picker. Choices persist between visits.
 
 ### Backend support added across batches
 
@@ -222,6 +225,7 @@ These interactive/UX features have been built on top of the core app.
 - **Persist history in a database** (instead of just the browser).
 - **Markdown tables** and **LaTeX/math** rendering.
 - **Image generation** from prompts.
+- **Word/character counter**, **keyboard shortcuts**, **retry button**.
 - **User accounts** and per-user saved chats.
 - **Rate limiting** to protect the server from abuse.
 - **Install as a PWA** (installable, works offline).

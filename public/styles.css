@@ -28,6 +28,70 @@ body[data-theme="light"] {
   --page-bg: linear-gradient(135deg, #e0e7ff, #f8fafc);
 }
 
+/* Midnight — deep indigo/violet, dark */
+body[data-theme="midnight"] {
+  --panel: #1a1730;
+  --sidebar-bg: #0d0b1f;
+  --bot-bubble: #2a2650;
+  --user-bubble: #7c3aed;
+  --text: #ede9fe;
+  --muted: #a89cc8;
+  --accent: #8b5cf6;
+  --header-bg: rgba(0, 0, 0, 0.25);
+  --border: rgba(255, 255, 255, 0.08);
+  --input-bg: #120f26;
+  --code-bg: #0d0b1f;
+  --page-bg: linear-gradient(135deg, #0d0b1f, #2e1065);
+}
+
+/* Forest — dark green, calm */
+body[data-theme="forest"] {
+  --panel: #14241c;
+  --sidebar-bg: #0b1711;
+  --bot-bubble: #1f3b2d;
+  --user-bubble: #059669;
+  --text: #e7f5ee;
+  --muted: #9bbfaa;
+  --accent: #10b981;
+  --header-bg: rgba(0, 0, 0, 0.22);
+  --border: rgba(255, 255, 255, 0.08);
+  --input-bg: #0b1711;
+  --code-bg: #0b1711;
+  --page-bg: linear-gradient(135deg, #0b1711, #064e3b);
+}
+
+/* Solar — warm cream, light */
+body[data-theme="solar"] {
+  --panel: #fdf6e3;
+  --sidebar-bg: #f4ecd4;
+  --bot-bubble: #eee3c4;
+  --user-bubble: #b58900;
+  --text: #3b3322;
+  --muted: #8a7b5c;
+  --accent: #cb8b00;
+  --header-bg: #f7efd8;
+  --border: rgba(0, 0, 0, 0.1);
+  --input-bg: #f4ecd4;
+  --code-bg: #2b2716;
+  --page-bg: linear-gradient(135deg, #fdf6e3, #f0e4c0);
+}
+
+/* Rose — soft pink, light */
+body[data-theme="rose"] {
+  --panel: #fff5f8;
+  --sidebar-bg: #fde7ef;
+  --bot-bubble: #fbd9e6;
+  --user-bubble: #e11d68;
+  --text: #4a1730;
+  --muted: #a05878;
+  --accent: #ec4899;
+  --header-bg: #fdeef4;
+  --border: rgba(0, 0, 0, 0.08);
+  --input-bg: #fde7ef;
+  --code-bg: #3a1226;
+  --page-bg: linear-gradient(135deg, #ffe4ee, #fff5f8);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -647,6 +711,37 @@ body {
 }
 select.settings-input {
   cursor: pointer;
+}
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.accent-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s;
+}
+.accent-swatch:hover {
+  transform: scale(1.12);
+}
+.accent-swatch.selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text);
+}
+.accent-swatch.default {
+  background: conic-gradient(
+    #3b82f6,
+    #8b5cf6,
+    #ec4899,
+    #10b981,
+    #f59e0b,
+    #3b82f6
+  );
 }
 .modal-content h2 {
   font-size: 1.1rem;

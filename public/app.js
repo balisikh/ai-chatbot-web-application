@@ -31,6 +31,8 @@ const presetSelect = document.getElementById("preset");
 const temperatureInput = document.getElementById("temperature");
 const tempValueEl = document.getElementById("temp-value");
 const maxLengthSelect = document.getElementById("max-length");
+const themeSelect = document.getElementById("theme-select");
+const accentRow = document.getElementById("accent-row");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -45,6 +47,16 @@ const SUGGESTIONS = [
   "Give me 3 dinner ideas",
   "How do I stay productive?",
 ];
+
+const THEMES = [
+  { id: "dark", label: "Dark (default)" },
+  { id: "light", label: "Light" },
+  { id: "midnight", label: "Midnight" },
+  { id: "forest", label: "Forest" },
+  { id: "solar", label: "Solar" },
+  { id: "rose", label: "Rose" },
+];
+const ACCENTS = ["#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f59e0b", "#10b981", "#14b8a6"];
 
 const PRESETS = {
   "Default assistant":
@@ -71,6 +83,8 @@ let settings = Object.assign(
     temperature: 0.7,
     maxTokens: 512,
     preset: "Default assistant",
+    theme: localStorage.getItem(THEME_KEY) || "dark",
+    accent: "",
   },
   loadJSON(SETTINGS_KEY, {})
 );
@@ -473,16 +487,73 @@ function startRename(convo, titleEl) {
   });
 }
 
-// --- Theme ----------------------------------------------------------------
+// --- Theme & accent -------------------------------------------------------
 function applyTheme(theme) {
   document.body.dataset.theme = theme;
-  themeToggleBtn.textContent = theme === "light" ? "Dark" : "Light";
 }
+function applyAccent(color) {
+  if (color) {
+    document.documentElement.style.setProperty("--accent", color);
+    document.documentElement.style.setProperty("--user-bubble", color);
+  } else {
+    document.documentElement.style.removeProperty("--accent");
+    document.documentElement.style.removeProperty("--user-bubble");
+  }
+}
+// Header button cycles through the available themes for quick switching.
 themeToggleBtn.addEventListener("click", () => {
-  const next = document.body.dataset.theme === "light" ? "dark" : "light";
-  applyTheme(next);
-  localStorage.setItem(THEME_KEY, next);
+  const ids = THEMES.map((t) => t.id);
+  const idx = ids.indexOf(settings.theme);
+  settings.theme = ids[(idx + 1) % ids.length];
+  applyTheme(settings.theme);
+  localStorage.setItem(THEME_KEY, settings.theme);
+  saveSettings();
+  if (themeSelect) themeSelect.value = settings.theme;
 });
+
+function populateThemeControls() {
+  themeSelect.innerHTML = "";
+  for (const t of THEMES) {
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.label;
+    themeSelect.appendChild(o);
+  }
+  themeSelect.addEventListener("change", () => {
+    settings.theme = themeSelect.value;
+    applyTheme(settings.theme);
+    localStorage.setItem(THEME_KEY, settings.theme);
+    saveSettings();
+  });
+
+  accentRow.innerHTML = "";
+  const mkSwatch = (color, isDefault) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "accent-swatch" + (isDefault ? " default" : "");
+    if (!isDefault) b.style.background = color;
+    b.title = isDefault ? "Theme default" : color;
+    b.addEventListener("click", () => {
+      settings.accent = isDefault ? "" : color;
+      applyAccent(settings.accent);
+      saveSettings();
+      markSelectedAccent();
+    });
+    accentRow.appendChild(b);
+  };
+  mkSwatch("", true);
+  ACCENTS.forEach((c) => mkSwatch(c, false));
+}
+function markSelectedAccent() {
+  const swatches = accentRow.querySelectorAll(".accent-swatch");
+  swatches.forEach((s) => s.classList.remove("selected"));
+  if (!settings.accent) {
+    swatches[0]?.classList.add("selected");
+  } else {
+    const idx = ACCENTS.indexOf(settings.accent);
+    if (idx >= 0) swatches[idx + 1]?.classList.add("selected");
+  }
+}
 
 // --- Sidebar toggle / new chat / search -----------------------------------
 toggleSidebarBtn.addEventListener("click", () => {
@@ -569,6 +640,8 @@ function openSettings() {
   temperatureInput.value = String(settings.temperature ?? 0.7);
   tempValueEl.textContent = temperatureInput.value;
   maxLengthSelect.value = String(settings.maxTokens ?? 512);
+  themeSelect.value = settings.theme || "dark";
+  markSelectedAccent();
   readAloudInput.checked = !!settings.readAloud;
   settingsModal.classList.remove("hidden");
 }
@@ -602,7 +675,14 @@ resetSettingsBtn.addEventListener("click", () => {
   temperatureInput.value = "0.7";
   tempValueEl.textContent = "0.7";
   maxLengthSelect.value = "512";
+  themeSelect.value = "dark";
   readAloudInput.checked = false;
+  settings.accent = "";
+  applyAccent("");
+  applyTheme("dark");
+  settings.theme = "dark";
+  localStorage.setItem(THEME_KEY, "dark");
+  markSelectedAccent();
 });
 settingsModal.addEventListener("click", (e) => {
   if (e.target === settingsModal) closeSettings();
@@ -880,7 +960,9 @@ async function regenerate() {
 }
 
 // --- Startup --------------------------------------------------------------
-applyTheme(localStorage.getItem(THEME_KEY) || "dark");
+applyTheme(settings.theme || "dark");
+applyAccent(settings.accent || "");
+populateThemeControls();
 populatePresets();
 if (conversations.length === 0) newConversation();
 renderSidebar();
