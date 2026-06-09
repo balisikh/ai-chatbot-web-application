@@ -206,14 +206,28 @@ These interactive/UX features have been built on top of the core app.
 - **Edit & resend** — an Edit button on any of your messages reloads it into the
   input and truncates the chat from that point, so you can re-ask.
 - **File/document upload** — attach a text-based file (`.txt`, `.md`, `.csv`,
-  `.json`, code, etc.); its contents are sent as context so you can ask
-  questions about it (large files are truncated to keep within the context).
+  `.json`, code, etc.) **or a PDF**; its contents are sent as context so you can
+  ask questions about it (large files are truncated to keep within the context).
+  PDF text is extracted in the browser with a locally bundled copy of Mozilla's
+  pdf.js (`public/vendor/pdfjs/`, loaded on demand so it stays offline), reading
+  up to the first 50 pages.
 - **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
   Solar, Rose) selectable in Settings or by cycling with the header button, plus
   a custom accent-color picker. Choices persist between visits.
 - **Word / character counter** — a small live count under the input box that
   appears as you type (with a soft warning past ~4000 characters) and hides
   when the box is empty.
+- **Markdown tables** — GitHub-style tables (with column alignment) now render
+  as real tables inside replies.
+- **Keyboard shortcuts** — `Ctrl/Cmd+K` new chat, `Ctrl/Cmd+/` focus search,
+  and `Esc` to stop a reply / close the modal / close the export menu / close
+  the mobile drawer.
+- **Retry on error** — failed replies show a red bubble with a Retry button
+  (and stop generation cleanly).
+- **Thumbs up / down feedback** — rate any reply; the choice is saved per
+  message and can be toggled off.
+- **Toast confirmations** — small pop-ups confirm actions like "Copied to
+  clipboard", new chat, and feedback.
 - **Responsive design** — adapts to phones, tablets, and large screens:
   - On phones the app goes full-screen and the sidebar becomes a slide-in
     drawer with a tap-away backdrop (auto-closes when you pick/create a chat).

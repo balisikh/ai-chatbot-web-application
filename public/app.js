@@ -20,6 +20,7 @@ const attachmentRemoveBtn = document.getElementById("attachment-remove");
 const scrollBottomBtn = document.getElementById("scroll-bottom");
 const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 const charCounter = document.getElementById("char-counter");
+const toastEl = document.getElementById("toast");
 const searchInput = document.getElementById("search");
 const exportBtn = document.getElementById("export-btn");
 const exportMenu = document.getElementById("export-menu");
@@ -182,6 +183,18 @@ function highlightCode(escaped) {
     return m;
   });
 }
+function splitTableRow(line) {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+function isTableSeparator(line) {
+  if (!line || !line.includes("-")) return false;
+  const cells = splitTableRow(line);
+  return cells.length > 0 && cells.every((c) => /^:?-{1,}:?$/.test(c));
+}
+
 function renderMarkdown(md) {
   const codeBlocks = [];
   let src = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
@@ -208,14 +221,50 @@ function renderMarkdown(md) {
       listType = null;
     }
   };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trimEnd();
     const ph = line.match(/^\u0000(\d+)\u0000$/);
     if (ph) {
       closeList();
       html += `<pre><code class="hl">${highlightCode(
         escapeHtml(codeBlocks[+ph[1]])
       )}</code></pre>`;
+      continue;
+    }
+    // GitHub-style tables: header row, separator row, then body rows.
+    if (
+      line.includes("|") &&
+      i + 1 < lines.length &&
+      isTableSeparator(lines[i + 1])
+    ) {
+      closeList();
+      const header = splitTableRow(line);
+      const aligns = splitTableRow(lines[i + 1]).map((c) => {
+        const l = c.startsWith(":");
+        const r = c.endsWith(":");
+        return l && r ? "center" : r ? "right" : l ? "left" : "";
+      });
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+        rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      i--;
+      const cellStyle = (idx) =>
+        aligns[idx] ? ` style="text-align:${aligns[idx]}"` : "";
+      let t = "<table><thead><tr>";
+      header.forEach((h, idx) => (t += `<th${cellStyle(idx)}>${inline(h)}</th>`));
+      t += "</tr></thead><tbody>";
+      for (const row of rows) {
+        t += "<tr>";
+        for (let idx = 0; idx < header.length; idx++) {
+          t += `<td${cellStyle(idx)}>${inline(row[idx] || "")}</td>`;
+        }
+        t += "</tr>";
+      }
+      t += "</tbody></table>";
+      html += t;
       continue;
     }
     if (/^\s*$/.test(line)) {
@@ -257,6 +306,20 @@ function toPlainText(md) {
     .trim();
 }
 
+// --- Toast ----------------------------------------------------------------
+let toastTimer = null;
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.remove("hidden");
+  void toastEl.offsetWidth; // restart transition
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove("show");
+    setTimeout(() => toastEl.classList.add("hidden"), 220);
+  }, 1800);
+}
+
 // --- DOM helpers ----------------------------------------------------------
 function formatTime(iso) {
   const d = iso ? new Date(iso) : new Date();
@@ -281,6 +344,7 @@ function enhanceCodeBlocks(bubble) {
       try {
         await navigator.clipboard.writeText(code ? code.textContent : "");
         btn.textContent = "Copied!";
+        showToast("Code copied to clipboard");
         setTimeout(() => (btn.textContent = "Copy code"), 1500);
       } catch {
         /* ignore */
@@ -315,6 +379,7 @@ function addMessage(role, text, opts = {}) {
     span.textContent = text;
     bubble.appendChild(span);
   } else {
+    if (opts.error) bubble.classList.add("error");
     bubble.innerHTML = renderMarkdown(text || "");
     bubble.dataset.raw = text || "";
     enhanceCodeBlocks(bubble);
@@ -336,15 +401,33 @@ function addMessage(role, text, opts = {}) {
       makeMetaButton("Copy", "Copy reply", async () => {
         try {
           await navigator.clipboard.writeText(bubble.dataset.raw || "");
+          showToast("Copied to clipboard");
         } catch {
           /* ignore */
         }
       })
     );
+    if (opts.onRetry) {
+      const r = makeMetaButton("Retry", "Try again", opts.onRetry);
+      r.classList.add("retry-btn");
+      meta.appendChild(r);
+    }
     if (opts.onRegenerate) {
       const b = makeMetaButton("Regenerate", "Regenerate this reply", opts.onRegenerate);
       b.classList.add("regen-btn");
       meta.appendChild(b);
+    }
+    if (opts.onFeedback) {
+      const up = makeMetaButton("\u{1F44D}", "Good response", () =>
+        opts.onFeedback("up")
+      );
+      const down = makeMetaButton("\u{1F44E}", "Bad response", () =>
+        opts.onFeedback("down")
+      );
+      if (opts.feedback === "up") up.classList.add("active");
+      if (opts.feedback === "down") down.classList.add("active");
+      meta.appendChild(up);
+      meta.appendChild(down);
     }
   }
   wrapper.appendChild(meta);
@@ -401,7 +484,12 @@ function renderConversation() {
     } else {
       addMessage("bot", msg.content, {
         time: msg.t,
-        onRegenerate: i === lastAssistant && !isGenerating ? regenerate : undefined,
+        error: msg.error,
+        onRetry: msg.error && !isGenerating ? regenerate : undefined,
+        onRegenerate:
+          !msg.error && i === lastAssistant && !isGenerating ? regenerate : undefined,
+        onFeedback: !msg.error ? (v) => setFeedback(i, v) : undefined,
+        feedback: msg.feedback,
       });
     }
   });
@@ -731,21 +819,73 @@ modelPicker.addEventListener("change", () => {
 });
 
 // --- File upload ----------------------------------------------------------
+const ATTACH_MAX = 30000;
+let pdfjsReady = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve();
+  if (pdfjsReady) return pdfjsReady;
+  pdfjsReady = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "vendor/pdfjs/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "vendor/pdfjs/pdf.worker.min.js";
+      resolve();
+    };
+    s.onerror = () => reject(new Error("Failed to load PDF reader"));
+    document.head.appendChild(s);
+  });
+  return pdfjsReady;
+}
+async function extractPdfText(file) {
+  await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  const maxPages = Math.min(pdf.numPages, 50);
+  let text = "";
+  for (let p = 1; p <= maxPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    text += content.items.map((it) => it.str).join(" ") + "\n\n";
+    if (text.length > ATTACH_MAX) break;
+  }
+  if (pdf.numPages > maxPages) text += `\n[Only first ${maxPages} pages read]`;
+  return text;
+}
+function setAttachment(name, content) {
+  if (content.length > ATTACH_MAX)
+    content = content.slice(0, ATTACH_MAX) + "\n...[truncated]";
+  pendingAttachment = { name, content };
+  attachmentNameEl.textContent = "\u{1F4CE} " + name;
+  attachmentEl.classList.remove("hidden");
+}
 attachBtn.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", async () => {
   const f = fileInput.files[0];
-  if (!f) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    let content = String(reader.result || "");
-    const MAX = 30000;
-    if (content.length > MAX) content = content.slice(0, MAX) + "\n...[truncated]";
-    pendingAttachment = { name: f.name, content };
-    attachmentNameEl.textContent = "\u{1F4CE} " + f.name;
-    attachmentEl.classList.remove("hidden");
-  };
-  reader.readAsText(f);
   fileInput.value = "";
+  if (!f) return;
+  const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+  if (isPdf) {
+    attachmentNameEl.textContent = "\u{1F4CE} Reading " + f.name + "...";
+    attachmentEl.classList.remove("hidden");
+    try {
+      const text = await extractPdfText(f);
+      if (!text.trim()) {
+        showToast("No readable text found in that PDF");
+        clearAttachment();
+        return;
+      }
+      setAttachment(f.name, text);
+      showToast("PDF loaded");
+    } catch (err) {
+      showToast("Could not read PDF: " + err.message);
+      clearAttachment();
+    }
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => setAttachment(f.name, String(reader.result || ""));
+  reader.readAsText(f);
 });
 function clearAttachment() {
   pendingAttachment = null;
@@ -865,6 +1005,7 @@ async function generateReply() {
 
   let full = "";
   let aborted = false;
+  let errored = false;
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -903,13 +1044,17 @@ async function generateReply() {
     }
   } catch (err) {
     if (err.name === "AbortError") aborted = true;
-    else full = `Error: ${err.message}`;
+    else {
+      full = `Error: ${err.message}`;
+      errored = true;
+    }
   } finally {
     if (aborted && full.trim()) full += "\n\n_(stopped)_";
     else if (!full.trim()) full = aborted ? "_(stopped)_" : "(no response)";
     convo.messages.push({
       role: "assistant",
       content: full,
+      error: errored || undefined,
       t: new Date().toISOString(),
     });
     saveConvos();
@@ -978,6 +1123,18 @@ function editMessage(index) {
   input.focus();
 }
 
+// --- Feedback (thumbs) ----------------------------------------------------
+function setFeedback(index, value) {
+  const convo = getActive();
+  const msg = convo.messages[index];
+  if (!msg) return;
+  msg.feedback = msg.feedback === value ? null : value;
+  saveConvos();
+  if (msg.feedback === "up") showToast("Thanks for the feedback!");
+  else if (msg.feedback === "down") showToast("Thanks — I'll try to do better.");
+  renderConversation();
+}
+
 // --- Regenerate -----------------------------------------------------------
 async function regenerate() {
   if (isGenerating) return;
@@ -989,6 +1146,41 @@ async function regenerate() {
   renderConversation();
   await generateReply();
 }
+
+// --- Keyboard shortcuts ---------------------------------------------------
+document.addEventListener("keydown", (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    newConvoBtn.click();
+    showToast("New chat");
+    return;
+  }
+  if (mod && e.key === "/") {
+    e.preventDefault();
+    searchInput.focus();
+    return;
+  }
+  if (e.key === "Escape") {
+    if (isGenerating && currentController) {
+      currentController.abort();
+      return;
+    }
+    if (!settingsModal.classList.contains("hidden")) {
+      closeSettings();
+      return;
+    }
+    if (!exportMenu.classList.contains("hidden")) {
+      exportMenu.classList.add("hidden");
+      return;
+    }
+    if (sidebar.classList.contains("open")) {
+      closeMobileSidebar();
+      return;
+    }
+    if (document.activeElement === input) input.blur();
+  }
+});
 
 // --- Startup --------------------------------------------------------------
 applyTheme(settings.theme || "dark");

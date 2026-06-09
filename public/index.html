@@ -63,7 +63,7 @@
           <button id="attach" type="button" class="mic-btn" title="Attach a text file" aria-label="Attach file">
             &#128206;
           </button>
-          <input id="file-input" type="file" class="hidden" accept=".txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml" />
+          <input id="file-input" type="file" class="hidden" accept=".pdf,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml" />
           <button id="mic" type="button" class="mic-btn" title="Speak your message" aria-label="Voice input">
             &#127908;
           </button>
@@ -123,6 +123,8 @@
         </div>
       </div>
     </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
     <script src="app.js"></script>
   </body>
