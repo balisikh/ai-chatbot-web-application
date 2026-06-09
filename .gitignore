@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment variables (keep your secret API key out of git!)
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts (generated locally)
+test-screenshots/
+playwright-report/
+test-results/

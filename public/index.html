@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Chatbot</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Sidebar: list of conversations -->
+      <aside id="sidebar" class="sidebar">
+        <button id="new-convo" class="new-convo-btn">+ New chat</button>
+        <div id="convo-list" class="convo-list"></div>
+        <button id="open-settings" class="settings-btn">Settings</button>
+      </aside>
+
+      <!-- Main chat area -->
+      <div class="chat-container">
+        <header class="chat-header">
+          <button id="toggle-sidebar" class="icon-btn" title="Toggle sidebar" aria-label="Toggle sidebar">
+            &#9776;
+          </button>
+          <div class="status-dot"></div>
+          <h1 id="convo-title">AI Chatbot</h1>
+          <div class="header-actions">
+            <select id="model-picker" class="model-picker" title="Choose AI model"></select>
+            <button id="theme-toggle" class="icon-btn" title="Toggle light/dark theme" aria-label="Toggle theme">
+              Theme
+            </button>
+          </div>
+        </header>
+
+        <main id="messages" class="messages" aria-live="polite"></main>
+
+        <button id="scroll-bottom" class="scroll-bottom hidden" title="Scroll to latest" aria-label="Scroll to latest">
+          &#8595;
+        </button>
+
+        <form id="chat-form" class="chat-form">
+          <button id="mic" type="button" class="mic-btn" title="Speak your message" aria-label="Voice input">
+            &#127908;
+          </button>
+          <textarea
+            id="input"
+            class="input"
+            placeholder="Type your message..."
+            rows="1"
+            autocomplete="off"
+          ></textarea>
+          <button id="send" type="submit" class="send-btn" aria-label="Send message">
+            Send
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Settings</h2>
+
+        <label for="system-prompt">Bot personality (system prompt)</label>
+        <textarea id="system-prompt" class="settings-input" rows="4"></textarea>
+
+        <label class="toggle-row">
+          <input type="checkbox" id="read-aloud" />
+          Read replies aloud
+        </label>
+
+        <div class="modal-actions">
+          <button id="reset-settings" class="icon-btn">Reset</button>
+          <button id="save-settings" class="send-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
