@@ -130,6 +130,14 @@ body {
   opacity: 1;
 }
 
+/* Collapsed sidebar (desktop): hide it to give the chat more room */
+.app.sidebar-collapsed .sidebar {
+  width: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
 /* --- Chat area --- */
 .chat-container {
   flex: 1;

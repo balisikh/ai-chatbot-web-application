@@ -391,8 +391,15 @@ themeToggleBtn.addEventListener("click", () => {
 });
 
 // --- Sidebar / new chat ---------------------------------------------------
+const appEl = document.querySelector(".app");
 toggleSidebarBtn.addEventListener("click", () => {
-  sidebar.classList.toggle("open");
+  // On small screens the sidebar slides in/out; on larger screens it
+  // collapses to give the chat more room. Either way the button does something.
+  if (window.matchMedia("(max-width: 720px)").matches) {
+    sidebar.classList.toggle("open");
+  } else {
+    appEl.classList.toggle("sidebar-collapsed");
+  }
 });
 newConvoBtn.addEventListener("click", () => {
   if (isGenerating && currentController) currentController.abort();
