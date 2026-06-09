@@ -87,6 +87,20 @@ body {
   margin-top: auto;
 }
 
+.search-input {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .convo-list {
   flex: 1;
   overflow-y: auto;
@@ -97,8 +111,8 @@ body {
 .convo-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 10px;
+  gap: 4px;
+  padding: 8px 8px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
@@ -117,17 +131,36 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.convo-pin,
+.convo-rename,
 .convo-del {
   background: transparent;
   border: none;
   color: inherit;
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1;
+  padding: 2px;
 }
+.convo-pin:hover,
+.convo-rename:hover,
 .convo-del:hover {
   opacity: 1;
+}
+.convo-pin.pinned {
+  opacity: 1;
+  color: #fbbf24;
+}
+.rename-input {
+  flex: 1;
+  font-size: 0.86rem;
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 /* Collapsed sidebar (desktop): hide it to give the chat more room */
@@ -192,6 +225,40 @@ body {
   font-size: 0.8rem;
   max-width: 150px;
   cursor: pointer;
+}
+
+/* Export menu */
+.export-wrap {
+  position: relative;
+}
+.export-menu {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  z-index: 30;
+  overflow: hidden;
+}
+.export-menu.hidden {
+  display: none;
+}
+.export-menu button {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.export-menu button:hover {
+  background: var(--border);
 }
 .status-dot {
   width: 10px;
@@ -431,6 +498,48 @@ body {
   display: none;
 }
 
+/* File attachment chip */
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 14px;
+  padding: 8px 12px;
+  background: var(--bot-bubble);
+  border-radius: 10px 10px 0 0;
+  font-size: 0.82rem;
+}
+.attachment.hidden {
+  display: none;
+}
+#attachment-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#attachment-remove {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+#attachment-remove:hover {
+  color: #ef4444;
+}
+.file-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+.hidden {
+  display: none;
+}
+
 /* Input form */
 .chat-form {
   display: flex;
@@ -525,9 +634,19 @@ body {
   padding: 22px;
   width: 100%;
   max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+.modal-content input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+select.settings-input {
+  cursor: pointer;
 }
 .modal-content h2 {
   font-size: 1.1rem;

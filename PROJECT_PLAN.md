@@ -186,17 +186,42 @@ These interactive/UX features have been built on top of the core app.
 - **Animated typing indicator** — bouncing dots while the AI is thinking.
 - **Scroll-to-latest button** — appears when scrolled up in a long chat.
 
-### Backend support added for Batch 2
+### Batch 3 — Power-user & content features
 
-- `/api/chat` now accepts an optional `model` and `systemPrompt` per request.
-- New `GET /api/models` endpoint reports the active provider and selectable
-  models (from Ollama's `/api/tags`, or a static OpenAI list).
+- **Personality presets** — pick from ready-made personas (Tutor, Coding
+  assistant, Creative writer, Concise expert, Pirate, Default) in Settings;
+  editing the prompt switches to a "Custom" persona.
+- **Creativity slider (temperature)** — control how focused vs. imaginative
+  replies are (0–1), sent per request.
+- **Response length control** — Short / Medium / Long / Unlimited cap on reply
+  size (mapped to `max_tokens` / Ollama `num_predict`).
+- **Export chat** — download the active conversation as `.md`, `.txt`, or
+  `.json` from the header Export menu.
+- **Rename conversations** — pencil button on each sidebar item for inline
+  editing of the title.
+- **Pin / favorite conversations** — star button keeps important chats sorted
+  to the top of the sidebar.
+- **Search across conversations** — sidebar search box filters chats by title
+  or message content.
+- **Edit & resend** — an Edit button on any of your messages reloads it into the
+  input and truncates the chat from that point, so you can re-ask.
+- **File/document upload** — attach a text-based file (`.txt`, `.md`, `.csv`,
+  `.json`, code, etc.); its contents are sent as context so you can ask
+  questions about it (large files are truncated to keep within the context).
+
+### Backend support added across batches
+
+- `/api/chat` accepts optional `model`, `systemPrompt`, `temperature`, and
+  `maxTokens` per request (applied to both the OpenAI and Ollama providers).
+- `GET /api/models` reports the active provider and selectable models
+  (from Ollama's `/api/tags`, or a static OpenAI list).
 
 ## 12. Future Enhancements (Optional)
 
 - **Deploy online** (e.g. Render, Railway) so others can use it.
 - **Persist history in a database** (instead of just the browser).
-- **Export chat** to `.md` / `.txt` / `.json`.
+- **Markdown tables** and **LaTeX/math** rendering.
+- **Image generation** from prompts.
 - **User accounts** and per-user saved chats.
 - **Rate limiting** to protect the server from abuse.
 - **Install as a PWA** (installable, works offline).

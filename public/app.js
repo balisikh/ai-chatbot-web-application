@@ -5,19 +5,32 @@ const sendBtn = document.getElementById("send");
 const messagesEl = document.getElementById("messages");
 const themeToggleBtn = document.getElementById("theme-toggle");
 const sidebar = document.getElementById("sidebar");
+const appEl = document.querySelector(".app");
 const toggleSidebarBtn = document.getElementById("toggle-sidebar");
 const convoListEl = document.getElementById("convo-list");
 const newConvoBtn = document.getElementById("new-convo");
 const convoTitleEl = document.getElementById("convo-title");
 const modelPicker = document.getElementById("model-picker");
 const micBtn = document.getElementById("mic");
+const attachBtn = document.getElementById("attach");
+const fileInput = document.getElementById("file-input");
+const attachmentEl = document.getElementById("attachment");
+const attachmentNameEl = document.getElementById("attachment-name");
+const attachmentRemoveBtn = document.getElementById("attachment-remove");
 const scrollBottomBtn = document.getElementById("scroll-bottom");
+const searchInput = document.getElementById("search");
+const exportBtn = document.getElementById("export-btn");
+const exportMenu = document.getElementById("export-menu");
 const settingsModal = document.getElementById("settings-modal");
 const openSettingsBtn = document.getElementById("open-settings");
 const saveSettingsBtn = document.getElementById("save-settings");
 const resetSettingsBtn = document.getElementById("reset-settings");
 const systemPromptInput = document.getElementById("system-prompt");
 const readAloudInput = document.getElementById("read-aloud");
+const presetSelect = document.getElementById("preset");
+const temperatureInput = document.getElementById("temperature");
+const tempValueEl = document.getElementById("temp-value");
+const maxLengthSelect = document.getElementById("max-length");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -26,8 +39,6 @@ const SETTINGS_KEY = "ai_chat_settings";
 const THEME_KEY = "ai_chat_theme";
 
 const WELCOME = "Hi! I'm your AI assistant. Ask me anything to get started.";
-const DEFAULT_PROMPT =
-  "You are a friendly, helpful AI assistant. Answer clearly and concisely.";
 const SUGGESTIONS = [
   "Explain quantum computing simply",
   "Write a short poem about the sea",
@@ -35,17 +46,39 @@ const SUGGESTIONS = [
   "How do I stay productive?",
 ];
 
+const PRESETS = {
+  "Default assistant":
+    "You are a friendly, helpful AI assistant. Answer clearly and concisely.",
+  "Helpful tutor":
+    "You are a patient tutor. Explain concepts step by step with simple analogies and examples.",
+  "Coding assistant":
+    "You are an expert programming assistant. Provide correct, well-commented code and explain briefly.",
+  "Creative writer":
+    "You are a creative writer. Respond with vivid, imaginative, engaging prose.",
+  "Concise expert":
+    "You are a concise expert. Give accurate, no-fluff answers in as few words as possible.",
+  "Pirate": "You are a witty pirate. Always answer in pirate speak, but stay helpful.",
+};
+
 // --- State ----------------------------------------------------------------
 let conversations = loadJSON(CONVOS_KEY, []);
 let activeId = localStorage.getItem(ACTIVE_KEY) || null;
-let settings = loadJSON(SETTINGS_KEY, {
-  systemPrompt: "",
-  model: "",
-  readAloud: false,
-});
+let settings = Object.assign(
+  {
+    systemPrompt: "",
+    model: "",
+    readAloud: false,
+    temperature: 0.7,
+    maxTokens: 512,
+    preset: "Default assistant",
+  },
+  loadJSON(SETTINGS_KEY, {})
+);
 
 let currentController = null;
 let isGenerating = false;
+let searchQuery = "";
+let pendingAttachment = null;
 
 // --- Storage helpers ------------------------------------------------------
 function loadJSON(key, fallback) {
@@ -60,11 +93,14 @@ function saveJSON(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* ignore quota / disabled storage */
+    /* ignore */
   }
 }
 function saveConvos() {
   saveJSON(CONVOS_KEY, conversations);
+}
+function saveSettings() {
+  saveJSON(SETTINGS_KEY, settings);
 }
 
 // --- Conversation model ---------------------------------------------------
@@ -73,6 +109,7 @@ function newConversation() {
     id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
     title: "New chat",
     messages: [],
+    pinned: false,
     createdAt: new Date().toISOString(),
   };
   conversations.unshift(convo);
@@ -81,7 +118,6 @@ function newConversation() {
   saveConvos();
   return convo;
 }
-
 function getActive() {
   let convo = conversations.find((c) => c.id === activeId);
   if (!convo) {
@@ -91,7 +127,6 @@ function getActive() {
   }
   return convo;
 }
-
 function deleteConversation(id) {
   conversations = conversations.filter((c) => c.id !== id);
   if (activeId === id) {
@@ -103,17 +138,15 @@ function deleteConversation(id) {
   renderSidebar();
   renderConversation();
 }
-
 function switchConversation(id) {
   activeId = id;
   localStorage.setItem(ACTIVE_KEY, id);
   renderSidebar();
   renderConversation();
 }
-
-function maybeAutoTitle(convo, firstUserText) {
-  if (convo.title === "New chat" && firstUserText) {
-    convo.title = firstUserText.slice(0, 32) + (firstUserText.length > 32 ? "..." : "");
+function maybeAutoTitle(convo, firstText) {
+  if (convo.title === "New chat" && firstText) {
+    convo.title = firstText.slice(0, 32) + (firstText.length > 32 ? "..." : "");
   }
 }
 
@@ -121,7 +154,6 @@ function maybeAutoTitle(convo, firstUserText) {
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-
 function highlightCode(escaped) {
   const pattern =
     /(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|\b(\d+(?:\.\d+)?)\b|\b(const|let|var|function|return|if|else|for|while|import|from|export|class|new|async|await|try|catch|throw|def|lambda|print|true|false|null|undefined|None|True|False|public|private|static|void|int|float|string|bool)\b/g;
@@ -133,14 +165,12 @@ function highlightCode(escaped) {
     return m;
   });
 }
-
 function renderMarkdown(md) {
   const codeBlocks = [];
   let src = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
     codeBlocks.push(code.replace(/\n$/, ""));
     return `\u0000${codeBlocks.length - 1}\u0000`;
   });
-
   const inline = (s) => {
     s = escapeHtml(s);
     s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
@@ -152,7 +182,6 @@ function renderMarkdown(md) {
     );
     return s;
   };
-
   const lines = src.split("\n");
   let html = "";
   let listType = null;
@@ -162,14 +191,14 @@ function renderMarkdown(md) {
       listType = null;
     }
   };
-
   for (const raw of lines) {
     const line = raw.trimEnd();
     const ph = line.match(/^\u0000(\d+)\u0000$/);
     if (ph) {
       closeList();
-      const code = highlightCode(escapeHtml(codeBlocks[+ph[1]]));
-      html += `<pre><code class="hl">${code}</code></pre>`;
+      html += `<pre><code class="hl">${highlightCode(
+        escapeHtml(codeBlocks[+ph[1]])
+      )}</code></pre>`;
       continue;
     }
     if (/^\s*$/.test(line)) {
@@ -203,8 +232,6 @@ function renderMarkdown(md) {
   closeList();
   return html;
 }
-
-// Strip markdown to plain text for speech synthesis.
 function toPlainText(md) {
   return md
     .replace(/```[\s\S]*?```/g, " code snippet ")
@@ -218,17 +245,14 @@ function formatTime(iso) {
   const d = iso ? new Date(iso) : new Date();
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-
 function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
-
 function nearBottom() {
   return (
     messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60
   );
 }
-
 function enhanceCodeBlocks(bubble) {
   bubble.querySelectorAll("pre").forEach((pre) => {
     if (pre.querySelector(".copy-code")) return;
@@ -242,14 +266,12 @@ function enhanceCodeBlocks(bubble) {
         btn.textContent = "Copied!";
         setTimeout(() => (btn.textContent = "Copy code"), 1500);
       } catch {
-        btn.textContent = "Failed";
-        setTimeout(() => (btn.textContent = "Copy code"), 1500);
+        /* ignore */
       }
     });
     pre.appendChild(btn);
   });
 }
-
 function makeMetaButton(label, title, onClick) {
   const btn = document.createElement("button");
   btn.className = "meta-btn";
@@ -259,14 +281,22 @@ function makeMetaButton(label, title, onClick) {
   return btn;
 }
 
-function addMessage(role, text, time) {
+function addMessage(role, text, opts = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = `message ${role === "user" ? "user" : "bot"}`;
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   if (role === "user") {
-    bubble.textContent = text;
+    if (opts.file) {
+      const badge = document.createElement("div");
+      badge.className = "file-badge";
+      badge.textContent = "\u{1F4CE} " + opts.file;
+      bubble.appendChild(badge);
+    }
+    const span = document.createElement("span");
+    span.textContent = text;
+    bubble.appendChild(span);
   } else {
     bubble.innerHTML = renderMarkdown(text || "");
     bubble.dataset.raw = text || "";
@@ -278,9 +308,12 @@ function addMessage(role, text, time) {
   meta.className = "meta";
   const stamp = document.createElement("span");
   stamp.className = "timestamp";
-  stamp.textContent = formatTime(time);
+  stamp.textContent = formatTime(opts.time);
   meta.appendChild(stamp);
 
+  if (role === "user" && opts.onEdit) {
+    meta.appendChild(makeMetaButton("Edit", "Edit & resend", opts.onEdit));
+  }
   if (role !== "user") {
     meta.appendChild(
       makeMetaButton("Copy", "Copy reply", async () => {
@@ -291,11 +324,16 @@ function addMessage(role, text, time) {
         }
       })
     );
+    if (opts.onRegenerate) {
+      const b = makeMetaButton("Regenerate", "Regenerate this reply", opts.onRegenerate);
+      b.classList.add("regen-btn");
+      meta.appendChild(b);
+    }
   }
   wrapper.appendChild(meta);
-  wrapper._meta = meta;
-  wrapper._bubble = bubble;
 
+  wrapper._bubble = bubble;
+  wrapper._meta = meta;
   messagesEl.appendChild(wrapper);
   if (nearBottom()) scrollToBottom();
   return wrapper;
@@ -316,25 +354,8 @@ function showSuggestions() {
   }
   messagesEl.appendChild(wrap);
 }
-
 function removeSuggestions() {
   messagesEl.querySelector(".suggestions")?.remove();
-}
-
-// Adds a "Regenerate" button to the last bot message only.
-function refreshRegenerateButton() {
-  messagesEl
-    .querySelectorAll(".regen-btn")
-    .forEach((b) => b.remove());
-  const botWrappers = messagesEl.querySelectorAll(".message.bot");
-  const last = botWrappers[botWrappers.length - 1];
-  const convo = getActive();
-  const hasUser = convo.messages.some((m) => m.role === "user");
-  if (last && last._meta && hasUser && !isGenerating) {
-    const btn = makeMetaButton("Regenerate", "Regenerate this reply", regenerate);
-    btn.classList.add("regen-btn");
-    last._meta.appendChild(btn);
-  }
 }
 
 function renderConversation() {
@@ -346,23 +367,73 @@ function renderConversation() {
     showSuggestions();
     return;
   }
-  for (const msg of convo.messages) {
-    addMessage(msg.role === "user" ? "user" : "bot", msg.content, msg.t);
+  let lastAssistant = -1;
+  for (let i = convo.messages.length - 1; i >= 0; i--) {
+    if (convo.messages[i].role === "assistant") {
+      lastAssistant = i;
+      break;
+    }
   }
-  refreshRegenerateButton();
+  convo.messages.forEach((msg, i) => {
+    if (msg.role === "user") {
+      addMessage("user", msg.display || msg.content, {
+        time: msg.t,
+        file: msg.file,
+        onEdit: () => editMessage(i),
+      });
+    } else {
+      addMessage("bot", msg.content, {
+        time: msg.t,
+        onRegenerate: i === lastAssistant && !isGenerating ? regenerate : undefined,
+      });
+    }
+  });
   scrollToBottom();
 }
 
 function renderSidebar() {
   convoListEl.innerHTML = "";
-  for (const convo of conversations) {
+  const sorted = [...conversations].sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
+  );
+  const filtered = searchQuery
+    ? sorted.filter((c) => {
+        if ((c.title || "").toLowerCase().includes(searchQuery)) return true;
+        return c.messages.some((m) =>
+          (m.display || m.content || "").toLowerCase().includes(searchQuery)
+        );
+      })
+    : sorted;
+
+  for (const convo of filtered) {
     const item = document.createElement("div");
     item.className = "convo-item" + (convo.id === activeId ? " active" : "");
+
+    const pin = document.createElement("button");
+    pin.className = "convo-pin" + (convo.pinned ? " pinned" : "");
+    pin.textContent = convo.pinned ? "\u2605" : "\u2606";
+    pin.title = convo.pinned ? "Unpin" : "Pin to top";
+    pin.addEventListener("click", (e) => {
+      e.stopPropagation();
+      convo.pinned = !convo.pinned;
+      saveConvos();
+      renderSidebar();
+    });
 
     const title = document.createElement("span");
     title.className = "convo-item-title";
     title.textContent = convo.title || "New chat";
+    title.title = "Click to open";
     title.addEventListener("click", () => switchConversation(convo.id));
+
+    const rename = document.createElement("button");
+    rename.className = "convo-rename";
+    rename.textContent = "\u270E";
+    rename.title = "Rename conversation";
+    rename.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startRename(convo, title);
+    });
 
     const del = document.createElement("button");
     del.className = "convo-del";
@@ -373,10 +444,33 @@ function renderSidebar() {
       deleteConversation(convo.id);
     });
 
+    item.appendChild(pin);
     item.appendChild(title);
+    item.appendChild(rename);
     item.appendChild(del);
     convoListEl.appendChild(item);
   }
+}
+
+function startRename(convo, titleEl) {
+  const editor = document.createElement("input");
+  editor.className = "rename-input";
+  editor.value = convo.title;
+  titleEl.replaceWith(editor);
+  editor.focus();
+  editor.select();
+  const commit = () => {
+    const v = editor.value.trim();
+    convo.title = v || convo.title;
+    saveConvos();
+    renderSidebar();
+    if (convo.id === activeId) convoTitleEl.textContent = convo.title;
+  };
+  editor.addEventListener("blur", commit);
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") editor.blur();
+    if (e.key === "Escape") renderSidebar();
+  });
 }
 
 // --- Theme ----------------------------------------------------------------
@@ -390,11 +484,8 @@ themeToggleBtn.addEventListener("click", () => {
   localStorage.setItem(THEME_KEY, next);
 });
 
-// --- Sidebar / new chat ---------------------------------------------------
-const appEl = document.querySelector(".app");
+// --- Sidebar toggle / new chat / search -----------------------------------
 toggleSidebarBtn.addEventListener("click", () => {
-  // On small screens the sidebar slides in/out; on larger screens it
-  // collapses to give the chat more room. Either way the button does something.
   if (window.matchMedia("(max-width: 720px)").matches) {
     sidebar.classList.toggle("open");
   } else {
@@ -408,11 +499,76 @@ newConvoBtn.addEventListener("click", () => {
   renderConversation();
   input.focus();
 });
+searchInput.addEventListener("input", () => {
+  searchQuery = searchInput.value.toLowerCase().trim();
+  renderSidebar();
+});
+
+// --- Export ---------------------------------------------------------------
+function download(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function exportConversation(format) {
+  const convo = getActive();
+  const safe = (convo.title || "chat").replace(/[^a-z0-9-_]+/gi, "_");
+  if (format === "json") {
+    download(`${safe}.json`, JSON.stringify(convo, null, 2), "application/json");
+  } else if (format === "txt") {
+    const body = convo.messages
+      .map((m) => `${m.role === "user" ? "You" : "Assistant"}: ${m.display || m.content}`)
+      .join("\n\n");
+    download(`${safe}.txt`, body, "text/plain");
+  } else {
+    const body =
+      `# ${convo.title}\n\n` +
+      convo.messages
+        .map(
+          (m) =>
+            `**${m.role === "user" ? "You" : "Assistant"}:**\n\n${m.display || m.content}`
+        )
+        .join("\n\n---\n\n");
+    download(`${safe}.md`, body, "text/markdown");
+  }
+}
+exportBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  exportMenu.classList.toggle("hidden");
+});
+exportMenu.querySelectorAll("button").forEach((b) =>
+  b.addEventListener("click", () => {
+    exportConversation(b.dataset.format);
+    exportMenu.classList.add("hidden");
+  })
+);
+document.addEventListener("click", () => exportMenu.classList.add("hidden"));
 
 // --- Settings -------------------------------------------------------------
+function populatePresets() {
+  presetSelect.innerHTML = "";
+  for (const name of Object.keys(PRESETS)) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    presetSelect.appendChild(o);
+  }
+  const custom = document.createElement("option");
+  custom.value = "Custom";
+  custom.textContent = "Custom";
+  presetSelect.appendChild(custom);
+}
 function openSettings() {
+  presetSelect.value = settings.preset || "Default assistant";
   systemPromptInput.value = settings.systemPrompt || "";
-  systemPromptInput.placeholder = DEFAULT_PROMPT;
+  systemPromptInput.placeholder = PRESETS["Default assistant"];
+  temperatureInput.value = String(settings.temperature ?? 0.7);
+  tempValueEl.textContent = temperatureInput.value;
+  maxLengthSelect.value = String(settings.maxTokens ?? 512);
   readAloudInput.checked = !!settings.readAloud;
   settingsModal.classList.remove("hidden");
 }
@@ -420,14 +576,32 @@ function closeSettings() {
   settingsModal.classList.add("hidden");
 }
 openSettingsBtn.addEventListener("click", openSettings);
+presetSelect.addEventListener("change", () => {
+  if (presetSelect.value !== "Custom") {
+    systemPromptInput.value = PRESETS[presetSelect.value] || "";
+  }
+});
+systemPromptInput.addEventListener("input", () => {
+  presetSelect.value = "Custom";
+});
+temperatureInput.addEventListener("input", () => {
+  tempValueEl.textContent = temperatureInput.value;
+});
 saveSettingsBtn.addEventListener("click", () => {
+  settings.preset = presetSelect.value;
   settings.systemPrompt = systemPromptInput.value.trim();
+  settings.temperature = parseFloat(temperatureInput.value);
+  settings.maxTokens = parseInt(maxLengthSelect.value, 10) || 0;
   settings.readAloud = readAloudInput.checked;
-  saveJSON(SETTINGS_KEY, settings);
+  saveSettings();
   closeSettings();
 });
 resetSettingsBtn.addEventListener("click", () => {
+  presetSelect.value = "Default assistant";
   systemPromptInput.value = "";
+  temperatureInput.value = "0.7";
+  tempValueEl.textContent = "0.7";
+  maxLengthSelect.value = "512";
   readAloudInput.checked = false;
 });
 settingsModal.addEventListener("click", (e) => {
@@ -456,24 +630,45 @@ async function loadModels() {
 }
 modelPicker.addEventListener("change", () => {
   settings.model = modelPicker.value;
-  saveJSON(SETTINGS_KEY, settings);
+  saveSettings();
 });
 
-// --- Voice input (speech-to-text) -----------------------------------------
+// --- File upload ----------------------------------------------------------
+attachBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let content = String(reader.result || "");
+    const MAX = 30000;
+    if (content.length > MAX) content = content.slice(0, MAX) + "\n...[truncated]";
+    pendingAttachment = { name: f.name, content };
+    attachmentNameEl.textContent = "\u{1F4CE} " + f.name;
+    attachmentEl.classList.remove("hidden");
+  };
+  reader.readAsText(f);
+  fileInput.value = "";
+});
+function clearAttachment() {
+  pendingAttachment = null;
+  attachmentNameEl.textContent = "";
+  attachmentEl.classList.add("hidden");
+}
+attachmentRemoveBtn.addEventListener("click", clearAttachment);
+
+// --- Voice input ----------------------------------------------------------
 const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
 let listening = false;
-
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = "en-US";
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
-
   recognition.addEventListener("result", (e) => {
-    const text = e.results[0][0].transcript;
-    input.value = text;
+    input.value = e.results[0][0].transcript;
     input.dispatchEvent(new Event("input"));
   });
   recognition.addEventListener("end", () => {
@@ -485,7 +680,6 @@ if (SpeechRecognition) {
     listening = false;
     micBtn.classList.remove("listening");
   });
-
   micBtn.addEventListener("click", () => {
     if (listening) {
       recognition.stop();
@@ -503,15 +697,14 @@ if (SpeechRecognition) {
   micBtn.style.display = "none";
 }
 
-// --- Read aloud (text-to-speech) ------------------------------------------
+// --- Read aloud -----------------------------------------------------------
 function speak(text) {
   if (!settings.readAloud || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(toPlainText(text));
-  window.speechSynthesis.speak(utter);
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(toPlainText(text)));
 }
 
-// --- Scroll-to-bottom button ----------------------------------------------
+// --- Scroll-to-bottom -----------------------------------------------------
 messagesEl.addEventListener("scroll", () => {
   scrollBottomBtn.classList.toggle("hidden", nearBottom());
 });
@@ -529,7 +722,7 @@ input.addEventListener("keydown", (e) => {
   }
 });
 
-// --- Stop / generating state ----------------------------------------------
+// --- Generating state -----------------------------------------------------
 function setGenerating(on) {
   isGenerating = on;
   sendBtn.textContent = on ? "Stop" : "Send";
@@ -543,7 +736,7 @@ sendBtn.addEventListener("click", (e) => {
   }
 });
 
-// --- Core: generate an assistant reply via streaming ----------------------
+// --- Core: stream a reply -------------------------------------------------
 async function generateReply() {
   const convo = getActive();
   const payloadMessages = convo.messages.map((m) => ({
@@ -559,7 +752,6 @@ async function generateReply() {
 
   currentController = new AbortController();
   setGenerating(true);
-  refreshRegenerateButton();
 
   let full = "";
   let aborted = false;
@@ -571,10 +763,12 @@ async function generateReply() {
         messages: payloadMessages,
         model: settings.model || undefined,
         systemPrompt: settings.systemPrompt || undefined,
+        temperature:
+          typeof settings.temperature === "number" ? settings.temperature : undefined,
+        maxTokens: settings.maxTokens > 0 ? settings.maxTokens : undefined,
       }),
       signal: currentController.signal,
     });
-
     if (!res.ok || !res.body) {
       let message = "Request failed";
       try {
@@ -585,7 +779,6 @@ async function generateReply() {
       }
       throw new Error(message);
     }
-
     bubble.classList.remove("typing");
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -599,21 +792,11 @@ async function generateReply() {
       if (nearBottom()) scrollToBottom();
     }
   } catch (err) {
-    if (err.name === "AbortError") {
-      aborted = true;
-    } else {
-      bubble.classList.remove("typing");
-      full = `Error: ${err.message}`;
-      bubble.innerHTML = renderMarkdown(full);
-      bubble.dataset.raw = full;
-    }
+    if (err.name === "AbortError") aborted = true;
+    else full = `Error: ${err.message}`;
   } finally {
     if (aborted && full.trim()) full += "\n\n_(stopped)_";
     else if (!full.trim()) full = aborted ? "_(stopped)_" : "(no response)";
-    bubble.innerHTML = renderMarkdown(full);
-    bubble.dataset.raw = full;
-    enhanceCodeBlocks(bubble);
-
     convo.messages.push({
       role: "assistant",
       content: full,
@@ -621,7 +804,7 @@ async function generateReply() {
     });
     saveConvos();
     setGenerating(false);
-    refreshRegenerateButton();
+    renderConversation();
     if (!aborted) speak(full);
     input.focus();
   }
@@ -632,26 +815,57 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (isGenerating) return;
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !pendingAttachment) return;
 
   const convo = getActive();
   removeSuggestions();
 
-  addMessage("user", text);
+  let content = text;
+  let display = text;
+  let file = null;
+  if (pendingAttachment) {
+    file = pendingAttachment.name;
+    content =
+      `The user attached a file named "${file}". Its contents:\n\n\`\`\`\n` +
+      pendingAttachment.content +
+      `\n\`\`\`\n\n` +
+      (text ? `User message: ${text}` : "Please read the file and help with it.");
+    display = text || "(sent a file)";
+  }
+
+  addMessage("user", display, { file });
   convo.messages.push({
     role: "user",
-    content: text,
+    content,
+    display,
+    file,
     t: new Date().toISOString(),
   });
-  maybeAutoTitle(convo, text);
+  maybeAutoTitle(convo, text || file);
   saveConvos();
   renderSidebar();
 
   input.value = "";
   input.style.height = "auto";
+  clearAttachment();
 
   await generateReply();
-}); 
+});
+
+// --- Edit & resend --------------------------------------------------------
+function editMessage(index) {
+  if (isGenerating) return;
+  const convo = getActive();
+  const msg = convo.messages[index];
+  if (!msg) return;
+  input.value = msg.display || msg.content;
+  input.dispatchEvent(new Event("input"));
+  convo.messages = convo.messages.slice(0, index);
+  saveConvos();
+  renderSidebar();
+  renderConversation();
+  input.focus();
+}
 
 // --- Regenerate -----------------------------------------------------------
 async function regenerate() {
@@ -661,14 +875,13 @@ async function regenerate() {
     convo.messages.pop();
     saveConvos();
   }
-  // Remove the last bot message from the DOM.
-  const botWrappers = messagesEl.querySelectorAll(".message.bot");
-  botWrappers[botWrappers.length - 1]?.remove();
+  renderConversation();
   await generateReply();
 }
 
 // --- Startup --------------------------------------------------------------
 applyTheme(localStorage.getItem(THEME_KEY) || "dark");
+populatePresets();
 if (conversations.length === 0) newConversation();
 renderSidebar();
 renderConversation();

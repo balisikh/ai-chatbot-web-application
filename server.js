@@ -34,14 +34,19 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 // --- Provider 1: OpenAI --------------------------------------------------
 // Streams reply text chunks to the client via the supplied write() callback.
 async function streamWithOpenAI(messages, write, opts = {}) {
-  const stream = await openai.chat.completions.create({
+  const params = {
     model: opts.model || OPENAI_MODEL,
     stream: true,
     messages: [
       { role: "system", content: opts.systemPrompt || SYSTEM_PROMPT },
       ...messages,
     ],
-  });
+  };
+  if (typeof opts.temperature === "number") params.temperature = opts.temperature;
+  if (typeof opts.maxTokens === "number" && opts.maxTokens > 0)
+    params.max_tokens = opts.maxTokens;
+
+  const stream = await openai.chat.completions.create(params);
   for await (const part of stream) {
     const delta = part.choices[0]?.delta?.content;
     if (delta) write(delta);
@@ -75,12 +80,18 @@ async function listOllamaModels() {
 
 // Streams reply text chunks from Ollama (newline-delimited JSON) to write().
 async function streamWithOllama(messages, write, opts = {}) {
+  const options = {};
+  if (typeof opts.temperature === "number") options.temperature = opts.temperature;
+  if (typeof opts.maxTokens === "number" && opts.maxTokens > 0)
+    options.num_predict = opts.maxTokens;
+
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: opts.model || OLLAMA_MODEL,
       stream: true,
+      options,
       messages: [
         { role: "system", content: opts.systemPrompt || SYSTEM_PROMPT },
         ...messages,
@@ -167,7 +178,7 @@ app.get("/api/models", async (req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { messages, model, systemPrompt } = req.body;
+  const { messages, model, systemPrompt, temperature, maxTokens } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return res
       .status(400)
@@ -180,6 +191,12 @@ app.post("/api/chat", async (req, res) => {
       typeof systemPrompt === "string" && systemPrompt.trim()
         ? systemPrompt.trim()
         : undefined,
+    temperature:
+      typeof temperature === "number" && temperature >= 0 && temperature <= 2
+        ? temperature
+        : undefined,
+    maxTokens:
+      typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : undefined,
   };
 
   // Stream the reply back as plain text so the UI can show it word-by-word.
