@@ -989,7 +989,7 @@ body[data-theme="rose"] .bubble thead th {
   background: rgba(239, 68, 68, 0.12);
 }
 
-/* --- Large screens: use more space --- */
+/* --- Large desktops: use more horizontal space --- */
 @media (min-width: 1500px) {
   .app {
     max-width: 1200px;
@@ -997,20 +997,12 @@ body[data-theme="rose"] .bubble thead th {
   }
 }
 
-/* --- Tablets --- */
+/* --- Tablets + phones: drawer sidebar, edge-to-edge app --- */
 @media (max-width: 960px) {
   body {
-    padding: 8px;
-  }
-  .sidebar {
-    width: 220px;
-  }
-}
-
-/* --- Phones: full-screen app + sidebar drawer --- */
-@media (max-width: 720px) {
-  body {
     padding: 0;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   .app {
     max-width: 100%;
@@ -1018,12 +1010,17 @@ body[data-theme="rose"] .bubble thead th {
     height: 100dvh;
     border-radius: 0;
   }
+  .app.sidebar-collapsed .sidebar {
+    width: min(80%, 300px);
+    padding: 14px;
+    border-right: 1px solid var(--border);
+    overflow: auto;
+  }
   .sidebar {
     position: absolute;
     top: 0;
     left: 0;
-    width: 80%;
-    max-width: 300px;
+    width: min(80%, 300px);
     z-index: 40;
     height: 100%;
     transform: translateX(-100%);
@@ -1033,9 +1030,13 @@ body[data-theme="rose"] .bubble thead th {
   .sidebar.open {
     transform: translateX(0);
   }
+  .sidebar-backdrop {
+    display: block;
+  }
 
   .chat-header {
     padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
     gap: 8px;
   }
   .chat-header h1 {
@@ -1044,13 +1045,9 @@ body[data-theme="rose"] .bubble thead th {
   .header-actions {
     gap: 6px;
   }
-  .icon-btn {
-    padding: 6px 8px;
-    font-size: 0.8rem;
-  }
   .model-picker {
-    max-width: 110px;
-    font-size: 0.75rem;
+    max-width: 120px;
+    font-size: 0.78rem;
   }
   .export-menu {
     min-width: 150px;
@@ -1068,8 +1065,45 @@ body[data-theme="rose"] .bubble thead th {
   }
 
   .chat-form {
-    padding: 10px;
-    gap: 6px;
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+  .char-counter {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .modal {
+    padding: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    align-items: center;
+  }
+  .modal-content {
+    max-height: min(85dvh, calc(100dvh - env(safe-area-inset-top) - 16px));
+    padding: 16px 18px;
+    border-radius: 14px;
+  }
+  .voice-select {
+    max-height: min(200px, 28dvh);
+  }
+  #tts-controls .search-input {
+    font-size: 16px;
+  }
+  .modal-actions .icon-btn,
+  .modal-actions .send-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* --- Phones: tighter header + input --- */
+@media (max-width: 720px) {
+  .icon-btn {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+  .model-picker {
+    max-width: 110px;
+    font-size: 0.75rem;
   }
   .mic-btn {
     padding: 0 12px;
@@ -1082,6 +1116,9 @@ body[data-theme="rose"] .bubble thead th {
     padding: 11px 12px;
     font-size: 16px; /* prevents iOS zoom-on-focus */
   }
+  .scroll-bottom {
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
 }
 
 /* --- Small phones --- */
@@ -1093,14 +1130,67 @@ body[data-theme="rose"] .bubble thead th {
     max-width: 84px;
   }
   .icon-btn {
-    padding: 6px 7px;
+    padding: 8px 8px;
     font-size: 0.75rem;
   }
   .convo-pin,
   .convo-rename,
-  .convo-del {
+  .convo-del,
+  .convo-tag-btn {
+    min-width: 36px;
+    min-height: 36px;
     font-size: 1rem;
-    padding: 4px;
+    padding: 6px;
+  }
+  .modal-content {
+    padding: 14px 16px;
+    max-height: 90dvh;
+  }
+}
+
+/* --- Touch devices: 44px minimum tap targets --- */
+@media (hover: none) and (pointer: coarse) {
+  .icon-btn,
+  .mic-btn,
+  .send-btn,
+  .new-convo-btn,
+  .settings-btn,
+  .chip,
+  .toggle-row {
+    min-height: 44px;
+  }
+  .icon-btn,
+  .mic-btn {
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .send-btn {
+    min-width: 48px;
+    padding: 0 18px;
+  }
+  .chip {
+    padding: 10px 16px;
+  }
+  .toggle-row input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+  }
+  .meta-btn {
+    min-height: 36px;
+    padding: 4px 10px;
+  }
+  .scroll-bottom {
+    width: 44px;
+    height: 44px;
+  }
+  .scroll-bottom.new {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+  .convo-item {
+    padding: 10px 8px;
   }
 }
 

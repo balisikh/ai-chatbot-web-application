@@ -826,7 +826,7 @@ function markSelectedAccent() {
 
 // --- Sidebar toggle / new chat / search -----------------------------------
 function isMobile() {
-  return window.matchMedia("(max-width: 720px)").matches;
+  return window.matchMedia("(max-width: 960px)").matches;
 }
 function openMobileSidebar() {
   sidebar.classList.add("open");
@@ -1373,10 +1373,8 @@ function updateVoiceHint(matchCount = 0) {
       ". English by accent; Punjabi male & female below. Enable translation toggles above.";
     return;
   }
-  voiceHint.textContent =
-    "English browser voices work without a key. For all accents and languages, add " +
-    "GOOGLE_CLOUD_TTS_API_KEY to .env (enable Text-to-Speech + Translation APIs), " +
-    "then restart the server.";
+  voiceHint.classList.add("hidden");
+  voiceHint.textContent = "";
 }
 
 function populateVoices() {
@@ -1498,9 +1496,7 @@ function populateVoices() {
     const opt = document.createElement("option");
     opt.value = "";
     opt.disabled = true;
-    opt.textContent = googleVoices.length
-      ? "No match — try another language name or accent"
-      : "No match — add GOOGLE_CLOUD_TTS_API_KEY for more languages";
+    opt.textContent = "No match — try another language name or accent";
     voiceSelect.appendChild(opt);
   }
 
