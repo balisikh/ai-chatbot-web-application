@@ -138,6 +138,11 @@
           Translate my messages to English (for the AI)
         </label>
 
+        <div id="translate-source-row" class="translate-source-row hidden">
+          <label for="translate-source-lang">Only translate this language → English</label>
+          <select id="translate-source-lang" class="settings-input"></select>
+        </div>
+
         <label class="toggle-row">
           <input type="checkbox" id="show-translation" />
           Show English translation under my messages
@@ -145,8 +150,9 @@
 
         <label class="toggle-row">
           <input type="checkbox" id="translate-for-speech" />
-          Translate replies to match voice language when speaking
+          Translate English replies to voice language when speaking
         </label>
+        <p id="translation-hint" class="voice-hint hidden"></p>
 
         <div id="tts-controls">
           <label for="voice-select">Voice (English accents + all languages)</label>

@@ -870,6 +870,12 @@ textarea#system-prompt {
 .voice-hint.hidden {
   display: none;
 }
+.translate-source-row {
+  margin: 4px 0 8px;
+}
+.translate-source-row.hidden {
+  display: none;
+}
 .voice-select {
   max-height: 220px;
 }

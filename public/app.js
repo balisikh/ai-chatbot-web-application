@@ -46,8 +46,11 @@ const ttsControls = document.getElementById("tts-controls");
 const voiceHint = document.getElementById("voice-hint");
 const voiceSearchInput = document.getElementById("voice-search");
 const translateToEnglishInput = document.getElementById("translate-to-english");
+const translateSourceRow = document.getElementById("translate-source-row");
+const translateSourceLangSelect = document.getElementById("translate-source-lang");
 const showTranslationInput = document.getElementById("show-translation");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
+const translationHint = document.getElementById("translation-hint");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -104,6 +107,7 @@ let settings = Object.assign(
     voiceName: "",
     speechRate: 1,
     translateToEnglish: false,
+    translateSourceLang: "",
     showTranslation: true,
     translateForSpeech: true,
   },
@@ -145,6 +149,23 @@ const ENGLISH_ACCENT_LABELS = {
   "en-ZA": "South Africa",
   "en-GB-WLS": "Wales",
 };
+
+const TRANSLATE_SOURCE_PRESETS = [
+  { code: "", label: "Any non-English language → English" },
+  { code: "pa", label: "Punjabi → English only" },
+  { code: "hi", label: "Hindi → English only" },
+  { code: "ur", label: "Urdu → English only" },
+  { code: "bn", label: "Bengali → English only" },
+  { code: "gu", label: "Gujarati → English only" },
+  { code: "mr", label: "Marathi → English only" },
+  { code: "ta", label: "Tamil → English only" },
+  { code: "te", label: "Telugu → English only" },
+  { code: "ar", label: "Arabic → English only" },
+  { code: "zh", label: "Chinese → English only" },
+  { code: "es", label: "Spanish → English only" },
+  { code: "fr", label: "French → English only" },
+  { code: "de", label: "German → English only" },
+];
 
 // --- Storage helpers ------------------------------------------------------
 function loadJSON(key, fallback) {
@@ -950,6 +971,8 @@ async function openSettings() {
   if (voiceSearchInput) voiceSearchInput.value = voiceSearchQuery;
   window.speechSynthesis?.getVoices();
   await loadGoogleVoices();
+  populateTranslateSourceOptions();
+  updateTranslationControlsState();
   populateVoices();
   speechRateInput.value = String(settings.speechRate || 1);
   rateValueEl.textContent = Number(settings.speechRate || 1).toFixed(1);
@@ -982,6 +1005,15 @@ if (voiceSearchInput) {
     populateVoices();
   });
 }
+if (translateToEnglishInput) {
+  translateToEnglishInput.addEventListener(
+    "change",
+    updateTranslateSourceRowVisibility
+  );
+}
+if (voiceSelect) {
+  voiceSelect.addEventListener("change", syncSettingsWithVoiceSelection);
+}
 saveSettingsBtn.addEventListener("click", () => {
   settings.preset = presetSelect.value;
   settings.systemPrompt = systemPromptInput.value.trim();
@@ -990,6 +1022,7 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.autoScroll = autoScrollInput.checked;
   settings.readAloud = readAloudInput.checked;
   settings.translateToEnglish = translateToEnglishInput.checked;
+  settings.translateSourceLang = translateSourceLangSelect?.value || "";
   settings.showTranslation = showTranslationInput.checked;
   settings.translateForSpeech = translateForSpeechInput.checked;
   settings.voiceName = voiceSelect.value;
@@ -1007,6 +1040,9 @@ resetSettingsBtn.addEventListener("click", () => {
   autoScrollInput.checked = true;
   readAloudInput.checked = false;
   translateToEnglishInput.checked = false;
+  settings.translateSourceLang = "";
+  populateTranslateSourceOptions();
+  updateTranslationControlsState();
   showTranslationInput.checked = true;
   translateForSpeechInput.checked = true;
   voiceSelect.value = "";
@@ -1240,19 +1276,153 @@ async function translateText(text, target, source) {
   return data;
 }
 
-function getSelectedVoiceLang() {
-  if (settings.voiceName?.startsWith("google:")) {
-    const id = settings.voiceName.slice(7);
+function langBase(code) {
+  return (code || "").split("-")[0].toLowerCase();
+}
+
+function updateTranslateSourceRowVisibility() {
+  if (!translateSourceRow) return;
+  const show =
+    translateToEnglishInput?.checked && !translateToEnglishInput.disabled;
+  translateSourceRow.classList.toggle("hidden", !show);
+}
+
+function updateTranslationControlsState() {
+  const enabled = googleTranslateEnabled;
+  const controls = [
+    translateToEnglishInput,
+    showTranslationInput,
+    translateForSpeechInput,
+    translateSourceLangSelect,
+  ];
+  for (const el of controls) {
+    if (el) el.disabled = !enabled;
+  }
+  if (translationHint) {
+    if (enabled) {
+      translationHint.classList.add("hidden");
+      translationHint.textContent = "";
+    } else {
+      translationHint.classList.remove("hidden");
+      translationHint.textContent =
+        "Translation and Google language voices are off until the server has a Google Cloud API key.";
+    }
+  }
+  updateTranslateSourceRowVisibility();
+}
+
+function collectGoogleLangCodes() {
+  const codes = new Set();
+  for (const v of googleVoices) {
+    const base = langBase(v.lang);
+    if (base && base !== "en") codes.add(base);
+  }
+  if (googlePunjabiGroup?.langCode) {
+    codes.add(langBase(googlePunjabiGroup.langCode));
+  }
+  for (const g of googleVoiceGroups) {
+    const base = langBase(g.langCode);
+    if (base && base !== "en") codes.add(base);
+  }
+  return codes;
+}
+
+function populateTranslateSourceOptions() {
+  if (!translateSourceLangSelect) return;
+  const seen = new Set();
+  const options = [];
+  for (const item of TRANSLATE_SOURCE_PRESETS) {
+    const base = langBase(item.code);
+    if (item.code && seen.has(base)) continue;
+    if (item.code) seen.add(base);
+    options.push(item);
+  }
+  for (const base of collectGoogleLangCodes()) {
+    if (seen.has(base)) continue;
+    seen.add(base);
+    options.push({
+      code: base,
+      label: `${languageLabel(base)} → English only`,
+    });
+  }
+  const saved = settings.translateSourceLang || "";
+  translateSourceLangSelect.innerHTML = "";
+  for (const item of options) {
+    const o = document.createElement("option");
+    o.value = item.code;
+    o.textContent = item.label;
+    translateSourceLangSelect.appendChild(o);
+  }
+  if ([...translateSourceLangSelect.options].some((o) => o.value === saved)) {
+    translateSourceLangSelect.value = saved;
+  } else {
+    translateSourceLangSelect.value = "";
+  }
+}
+
+async function translateUserMessageToEnglish(text) {
+  if (!text || !settings.translateToEnglish || !googleTranslateEnabled) {
+    return null;
+  }
+  const sourceFilter = settings.translateSourceLang || "";
+  try {
+    const data = await translateText(
+      text,
+      "en",
+      sourceFilter || undefined
+    );
+    if (!data.translatedText || data.translatedText === text) return null;
+    const detected = langBase(data.detectedSourceLanguage);
+    if (sourceFilter) {
+      const want = langBase(sourceFilter);
+      if (detected && detected !== want) return null;
+    } else if (detected === "en") {
+      return null;
+    }
+    return data.translatedText;
+  } catch (err) {
+    showToast(err.message || "Translation failed — sending original text");
+    return null;
+  }
+}
+
+function syncSettingsWithVoiceSelection() {
+  const lang = voiceLangFromName(voiceSelect?.value ?? settings.voiceName);
+  const base = langBase(lang);
+  if (!base || base === "en") return;
+  if (readAloudInput && !readAloudInput.disabled) readAloudInput.checked = true;
+  if (translateForSpeechInput && !translateForSpeechInput.disabled) {
+    translateForSpeechInput.checked = true;
+  }
+  if (
+    translateSourceLangSelect &&
+    !translateSourceLangSelect.disabled &&
+    translateToEnglishInput?.checked
+  ) {
+    const match = [...translateSourceLangSelect.options].some(
+      (o) => o.value === base
+    );
+    if (match) translateSourceLangSelect.value = base;
+  }
+}
+
+function voiceLangFromName(voiceName) {
+  if (voiceName?.startsWith("google:")) {
+    const id = voiceName.slice(7);
     const v = googleVoices.find((x) => x.id === id);
     return v?.lang || "";
   }
-  if (settings.voiceName && window.speechSynthesis) {
+  if (voiceName && window.speechSynthesis) {
     const v = window.speechSynthesis
       .getVoices()
-      .find((x) => x.name === settings.voiceName);
+      .find((x) => x.name === voiceName);
     return v?.lang || "";
   }
   return "";
+}
+
+function getSelectedVoiceLang() {
+  return voiceLangFromName(settings.voiceName);
 }
 
 function speechTranslateTarget(lang) {
@@ -1272,10 +1442,13 @@ async function prepareSpeechText(text) {
     googleTranslateEnabled
   ) {
     try {
-      const data = await translateText(plain, target);
-      if (data.translatedText) return data.translatedText;
+      const data = await translateText(plain, target, "en");
+      if (!data.translatedText) return plain;
+      const detected = langBase(data.detectedSourceLanguage);
+      if (detected && detected !== "en") return plain;
+      return data.translatedText;
     } catch {
-      /* speak original English if translation fails */
+      /* speak original text if translation fails */
     }
   }
   return plain;
@@ -1370,7 +1543,7 @@ function updateVoiceHint(matchCount = 0) {
     voiceHint.textContent =
       `${googleLanguageCount} languages, ${googleVoiceCount} Google voices` +
       (paCount ? ` (including ${paCount} Punjabi)` : "") +
-      ". English by accent; Punjabi male & female below. Enable translation toggles above.";
+      ". Turn on Read aloud + Translate English replies to voice language for non-English voices.";
     return;
   }
   voiceHint.classList.add("hidden");
@@ -1773,16 +1946,9 @@ form.addEventListener("submit", async (e) => {
   let translation = null;
   let file = null;
 
-  if (text && settings.translateToEnglish && googleTranslateEnabled) {
-    try {
-      const data = await translateText(text, "en");
-      if (data.translatedText) {
-        translation = data.translatedText;
-        if (translation !== text) content = translation;
-      }
-    } catch (err) {
-      showToast(err.message || "Translation failed — sending original text");
-    }
+  if (text) {
+    translation = await translateUserMessageToEnglish(text);
+    if (translation) content = translation;
   }
 
   if (pendingAttachment) {
