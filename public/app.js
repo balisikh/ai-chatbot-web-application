@@ -50,7 +50,6 @@ const translateSourceRow = document.getElementById("translate-source-row");
 const translateSourceLangSelect = document.getElementById("translate-source-lang");
 const showTranslationInput = document.getElementById("show-translation");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
-const translationHint = document.getElementById("translation-hint");
 const applyPunjabiModeBtn = document.getElementById("apply-punjabi-mode");
 
 // --- Storage keys ---------------------------------------------------------
@@ -1302,16 +1301,6 @@ function updateTranslationControlsState() {
   for (const el of controls) {
     if (el) el.disabled = !enabled;
   }
-  if (translationHint) {
-    if (enabled) {
-      translationHint.classList.add("hidden");
-      translationHint.textContent = "";
-    } else {
-      translationHint.classList.remove("hidden");
-      translationHint.textContent =
-        "Translation and Google language voices are off until the server has a Google Cloud API key.";
-    }
-  }
   updateTranslateSourceRowVisibility();
 }
 
@@ -1455,9 +1444,7 @@ function applyPunjabiChatMode() {
   populateVoices();
   const voiceOk = pickPunjabiVoiceInSelect();
   if (!googleTranslateEnabled) {
-    showToast(
-      "Punjabi mode applied — add Google API key for translation (see docs/GOOGLE_CLOUD_SETUP.md)"
-    );
+    showToast("Punjabi mode applied — translation needs server configuration");
   } else if (!voiceOk) {
     showToast(
       "Punjabi mode applied — install Punjabi speech in Windows or check Google key for voices"
@@ -1779,7 +1766,7 @@ async function playSpeech(text, { onStart, onEnd } = {}) {
       };
       await audio.play();
     } catch (err) {
-      showToast(err.message || "Google voice failed — check API key in .env");
+      showToast(err.message || "Google voice failed");
       onEnd?.();
     }
     return;
