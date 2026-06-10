@@ -43,6 +43,7 @@ const voiceSelect = document.getElementById("voice-select");
 const speechRateInput = document.getElementById("speech-rate");
 const rateValueEl = document.getElementById("rate-value");
 const ttsControls = document.getElementById("tts-controls");
+const voiceHint = document.getElementById("voice-hint");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -107,6 +108,8 @@ let isGenerating = false;
 let searchQuery = "";
 let pendingAttachment = null;
 let activeTag = null;
+let googleVoices = [];
+let speakingAudio = null;
 
 // --- Storage helpers ------------------------------------------------------
 function loadJSON(key, fallback) {
@@ -887,7 +890,7 @@ function populatePresets() {
   custom.textContent = "Custom";
   presetSelect.appendChild(custom);
 }
-function openSettings() {
+async function openSettings() {
   presetSelect.value = settings.preset || "Default assistant";
   systemPromptInput.value = settings.systemPrompt || "";
   systemPromptInput.placeholder = PRESETS["Default assistant"];
@@ -898,6 +901,7 @@ function openSettings() {
   markSelectedAccent();
   autoScrollInput.checked = settings.autoScroll !== false;
   readAloudInput.checked = !!settings.readAloud;
+  await loadGoogleVoices();
   populateVoices();
   speechRateInput.value = String(settings.speechRate || 1);
   rateValueEl.textContent = Number(settings.speechRate || 1).toFixed(1);
@@ -965,6 +969,17 @@ async function loadModels() {
     const res = await fetch("/api/models");
     const data = await res.json();
     modelPicker.innerHTML = "";
+    if (data.noModelsInstalled) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No model — run ollama pull";
+      modelPicker.appendChild(opt);
+      modelPicker.disabled = true;
+      showToast(
+        `Install the AI model: ollama pull ${data.configuredModel || "llama3.2:1b"}`
+      );
+      return;
+    }
     for (const m of data.models) {
       const opt = document.createElement("option");
       opt.value = m;
@@ -973,7 +988,11 @@ async function loadModels() {
     }
     const desired = settings.model || data.current;
     if (data.models.includes(desired)) modelPicker.value = desired;
+    else if (data.current) modelPicker.value = data.current;
     settings.model = modelPicker.value;
+    if (data.modelMissing && data.configuredModel) {
+      showToast(`Model ${data.configuredModel} missing — using ${data.current}`);
+    }
     if (data.provider === "offline") modelPicker.disabled = true;
   } catch {
     modelPicker.innerHTML = "<option>default</option>";
@@ -1117,21 +1136,170 @@ function applyVoiceSettings(utter) {
     }
   }
 }
-// Chrome/Edge often ignore speak() if it runs in the same tick as cancel().
-function playSpeech(text, { onStart, onEnd } = {}) {
-  if (!window.speechSynthesis) {
-    showToast("Speech isn't supported in this browser");
-    onEnd?.();
+function stopAllSpeech() {
+  window.speechSynthesis?.cancel();
+  if (speakingAudio) {
+    speakingAudio.pause();
+    speakingAudio = null;
+  }
+}
+
+async function loadGoogleVoices() {
+  try {
+    const res = await fetch("/api/speech/voices");
+    const data = await res.json();
+    googleVoices = data.googleEnabled ? data.googleVoices || [] : [];
+  } catch {
+    googleVoices = [];
+  }
+}
+
+function addVoiceGroup(label, voices, valueFn, labelFn) {
+  if (!voices.length) return;
+  const group = document.createElement("optgroup");
+  group.label = label;
+  voices.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = valueFn(v);
+    o.textContent = labelFn(v);
+    group.appendChild(o);
+  });
+  voiceSelect.appendChild(group);
+}
+
+function updateVoiceHint(browserVoices) {
+  if (!voiceHint) return;
+  const hasPunjabiBrowser = browserVoices.some((v) =>
+    (v.lang || "").toLowerCase().startsWith("pa")
+  );
+  const hasGooglePunjabi = googleVoices.some((v) => v.lang === "pa-IN");
+  if (hasPunjabiBrowser || hasGooglePunjabi) {
+    voiceHint.classList.add("hidden");
     return;
   }
+  voiceHint.classList.remove("hidden");
+  if (googleVoices.length === 0) {
+    voiceHint.textContent =
+      "No Punjabi voice found yet. On Windows: Settings → Time & language → " +
+      "Language → Add Punjabi (India) and download speech. Or add " +
+      "GOOGLE_CLOUD_TTS_API_KEY in .env for Google Punjabi voices.";
+  } else {
+    voiceHint.textContent =
+      "Pick a Google Punjabi voice above. Browser Punjabi voices can also be " +
+      "added via Windows language settings.";
+  }
+}
+
+function populateVoices() {
+  if (!window.speechSynthesis) {
+    if (ttsControls) ttsControls.style.display = "none";
+    return;
+  }
+  const browserVoices = window.speechSynthesis.getVoices();
+  const saved = settings.voiceName;
+  voiceSelect.innerHTML = "";
+
+  const def = document.createElement("option");
+  def.value = "";
+  def.textContent = "Default voice";
+  voiceSelect.appendChild(def);
+
+  addVoiceGroup(
+    "Google Cloud (Punjabi & English)",
+    googleVoices,
+    (v) => "google:" + v.id,
+    (v) => v.label
+  );
+
+  const punjabi = browserVoices.filter((v) =>
+    (v.lang || "").toLowerCase().startsWith("pa")
+  );
+  const english = browserVoices.filter((v) =>
+    (v.lang || "").toLowerCase().startsWith("en")
+  );
+  const other = browserVoices.filter(
+    (v) =>
+      !punjabi.includes(v) && !english.includes(v)
+  );
+
+  addVoiceGroup(
+    "Punjabi (browser / system)",
+    punjabi,
+    (v) => v.name,
+    (v) => `${v.name} (${v.lang})`
+  );
+  addVoiceGroup(
+    "English (browser / system)",
+    english,
+    (v) => v.name,
+    (v) => `${v.name} (${v.lang})`
+  );
+  addVoiceGroup(
+    "Other voices",
+    other,
+    (v) => v.name,
+    (v) => `${v.name} (${v.lang})`
+  );
+
+  if (saved && [...voiceSelect.options].some((o) => o.value === saved)) {
+    voiceSelect.value = saved;
+  }
+  updateVoiceHint(browserVoices);
+}
+
+// Chrome/Edge often ignore speak() if it runs in the same tick as cancel().
+async function playSpeech(text, { onStart, onEnd } = {}) {
   const plain = toPlainText(text || "").trim();
   if (!plain) {
     showToast("Nothing to read aloud");
     onEnd?.();
     return;
   }
+
+  // Google Cloud TTS (real Google Punjabi / English voices).
+  if (settings.voiceName?.startsWith("google:")) {
+    const voiceId = settings.voiceName.slice(7);
+    try {
+      const res = await fetch("/api/speech/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: plain,
+          voiceName: voiceId,
+          rate: settings.speechRate || 1,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "TTS failed");
+      stopAllSpeech();
+      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+      speakingAudio = audio;
+      onStart?.();
+      audio.onended = () => {
+        if (speakingAudio === audio) speakingAudio = null;
+        onEnd?.();
+      };
+      audio.onerror = () => {
+        if (speakingAudio === audio) speakingAudio = null;
+        showToast("Could not play Google voice audio");
+        onEnd?.();
+      };
+      await audio.play();
+    } catch (err) {
+      showToast(err.message || "Google voice failed — check API key in .env");
+      onEnd?.();
+    }
+    return;
+  }
+
+  if (!window.speechSynthesis) {
+    showToast("Speech isn't supported in this browser");
+    onEnd?.();
+    return;
+  }
+
+  stopAllSpeech();
   window.speechSynthesis.getVoices(); // prime voice list (required in some browsers)
-  window.speechSynthesis.cancel();
   setTimeout(() => {
     const u = new SpeechSynthesisUtterance(plain);
     applyVoiceSettings(u);
@@ -1147,25 +1315,6 @@ function playSpeech(text, { onStart, onEnd } = {}) {
     window.speechSynthesis.speak(u);
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   }, 80);
-}
-function populateVoices() {
-  if (!window.speechSynthesis) {
-    if (ttsControls) ttsControls.style.display = "none";
-    return;
-  }
-  const voices = window.speechSynthesis.getVoices();
-  voiceSelect.innerHTML = "";
-  const def = document.createElement("option");
-  def.value = "";
-  def.textContent = "Default voice";
-  voiceSelect.appendChild(def);
-  voices.forEach((v) => {
-    const o = document.createElement("option");
-    o.value = v.name;
-    o.textContent = `${v.name} (${v.lang})`;
-    voiceSelect.appendChild(o);
-  });
-  if (settings.voiceName) voiceSelect.value = settings.voiceName;
 }
 function speak(text) {
   if (!settings.readAloud || !window.speechSynthesis) return;
@@ -1184,7 +1333,7 @@ function makeSpeakButton(getText) {
   resetSpeakBtn(btn);
   btn.addEventListener("click", () => {
     const wasThis = speakingBtn === btn;
-    window.speechSynthesis?.cancel();
+    stopAllSpeech();
     if (speakingBtn) {
       resetSpeakBtn(speakingBtn);
       speakingBtn = null;
@@ -1472,7 +1621,9 @@ applyTheme(settings.theme || "dark");
 applyAccent(settings.accent || "");
 populateThemeControls();
 populatePresets();
-if (window.speechSynthesis) populateVoices();
+if (window.speechSynthesis) {
+  loadGoogleVoices().then(() => populateVoices());
+}
 if (conversations.length === 0) newConversation();
 renderSidebar();
 renderConversation();

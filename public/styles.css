@@ -861,6 +861,15 @@ textarea#system-prompt {
   min-height: 110px;
   line-height: 1.5;
 }
+.voice-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+.voice-hint.hidden {
+  display: none;
+}
 .toggle-row {
   display: flex;
   align-items: center;

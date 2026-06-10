@@ -31,6 +31,44 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2:1b";
 
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
+// Optional Google Cloud Text-to-Speech (real "Google" voices, including Punjabi).
+const rawTtsKey = process.env.GOOGLE_CLOUD_TTS_API_KEY || "";
+const GOOGLE_TTS_KEY =
+  rawTtsKey && rawTtsKey !== "PASTE_YOUR_KEY_HERE" ? rawTtsKey : null;
+
+const GOOGLE_TTS_VOICES = [
+  {
+    id: "pa-IN-Wavenet-A",
+    label: "Google Punjabi — Female (Wavenet)",
+    lang: "pa-IN",
+  },
+  {
+    id: "pa-IN-Wavenet-B",
+    label: "Google Punjabi — Male (Wavenet)",
+    lang: "pa-IN",
+  },
+  {
+    id: "pa-IN-Standard-A",
+    label: "Google Punjabi — Female (Standard)",
+    lang: "pa-IN",
+  },
+  {
+    id: "pa-IN-Standard-B",
+    label: "Google Punjabi — Male (Standard)",
+    lang: "pa-IN",
+  },
+  {
+    id: "en-US-Neural2-D",
+    label: "Google English US — Male (Neural2)",
+    lang: "en-US",
+  },
+  {
+    id: "en-US-Neural2-F",
+    label: "Google English US — Female (Neural2)",
+    lang: "en-US",
+  },
+];
+
 // --- Provider 1: OpenAI --------------------------------------------------
 // Streams reply text chunks to the client via the supplied write() callback.
 async function streamWithOpenAI(messages, write, opts = {}) {
@@ -99,7 +137,14 @@ async function streamWithOllama(messages, write, opts = {}) {
     }),
   });
   if (!res.ok || !res.body) {
-    throw new Error(`Ollama responded with status ${res.status}`);
+    let detail = `status ${res.status}`;
+    try {
+      const errBody = await res.json();
+      if (errBody?.error) detail = errBody.error;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(`Ollama error: ${detail}`);
   }
 
   const reader = res.body.getReader();
@@ -168,13 +213,73 @@ app.get("/api/models", async (req, res) => {
   }
   if (await isOllamaRunning()) {
     const models = await listOllamaModels();
+    const current =
+      models.includes(OLLAMA_MODEL) ? OLLAMA_MODEL : models[0] || null;
     return res.json({
       provider: "ollama",
-      models: models.length ? models : [OLLAMA_MODEL],
-      current: OLLAMA_MODEL,
+      models,
+      current,
+      configuredModel: OLLAMA_MODEL,
+      modelMissing: models.length > 0 && !models.includes(OLLAMA_MODEL),
+      noModelsInstalled: models.length === 0,
     });
   }
   return res.json({ provider: "offline", models: ["offline"], current: "offline" });
+});
+
+// Google Cloud TTS voices (Punjabi + English) when API key is configured.
+app.get("/api/speech/voices", (req, res) => {
+  res.json({
+    googleEnabled: !!GOOGLE_TTS_KEY,
+    googleVoices: GOOGLE_TTS_KEY ? GOOGLE_TTS_VOICES : [],
+  });
+});
+
+app.post("/api/speech/synthesize", async (req, res) => {
+  if (!GOOGLE_TTS_KEY) {
+    return res.status(503).json({
+      error:
+        "Google Text-to-Speech is not configured. Add GOOGLE_CLOUD_TTS_API_KEY to your .env file.",
+    });
+  }
+
+  const { text, voiceName, rate } = req.body;
+  if (!text || typeof text !== "string") {
+    return res.status(400).json({ error: "Request must include 'text'." });
+  }
+  const voice = GOOGLE_TTS_VOICES.find((v) => v.id === voiceName);
+  if (!voice) {
+    return res.status(400).json({ error: "Unknown Google voice." });
+  }
+
+  const speakingRate =
+    typeof rate === "number" && rate >= 0.5 && rate <= 2 ? rate : 1;
+  const plain = text.slice(0, 5000);
+
+  try {
+    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_KEY}`;
+    const gRes = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: { text: plain },
+        voice: { languageCode: voice.lang, name: voice.id },
+        audioConfig: {
+          audioEncoding: "MP3",
+          speakingRate,
+        },
+      }),
+    });
+    const data = await gRes.json();
+    if (!gRes.ok) {
+      const msg = data.error?.message || "Google TTS request failed";
+      return res.status(500).json({ error: msg });
+    }
+    return res.json({ audioContent: data.audioContent });
+  } catch (err) {
+    console.error("Google TTS error:", err.message);
+    return res.status(500).json({ error: "Google TTS request failed." });
+  }
 });
 
 app.post("/api/chat", async (req, res) => {
@@ -221,16 +326,24 @@ app.post("/api/chat", async (req, res) => {
     return res.end();
   } catch (providerErr) {
     console.error("AI provider failed:", providerErr.message);
-    // If nothing was sent yet, fall back to the offline assistant.
-    if (!res.headersSent || !res.writableEnded) {
-      try {
-        write("\n\n[Switched to offline mode due to an AI error]\n");
+  const msg = providerErr.message || "Unknown AI error";
+  const isModelMissing = /model.*not found/i.test(msg);
+  const userHint = isModelMissing
+    ? `The AI model is not installed. Open a terminal and run: ollama pull ${OLLAMA_MODEL}`
+    : msg;
+  try {
+    if (!res.writableEnded) {
+      if (isModelMissing) {
+        write(`Error: ${userHint}`);
+      } else {
+        write(`\n\nError: ${userHint}\n\n[Switched to offline demo mode]\n`);
         write(replyOffline(messages));
-      } catch {
-        /* connection may already be closed */
       }
     }
-    return res.end();
+  } catch {
+    /* connection may already be closed */
+  }
+  return res.end();
   }
 });
 
@@ -244,4 +357,7 @@ app.listen(PORT, async () => {
       : "offline demo mode (no AI model connected)";
   console.log(`AI chatbot running at http://localhost:${PORT}`);
   console.log(`Active AI provider: ${label}`);
+  if (GOOGLE_TTS_KEY) {
+    console.log("Google Text-to-Speech: enabled (Punjabi + English voices)");
+  }
 });
