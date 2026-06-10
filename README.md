@@ -1,33 +1,44 @@
 # AI Chatbot Web Application
 
-A simple AI chatbot web application: a plain **HTML / CSS / JavaScript** frontend and a small **Node.js / Express** backend that talks to **OpenAI's** language models.
+A full-featured AI chatbot: **HTML / CSS / JavaScript** frontend and a **Node.js / Express** backend. Chat works with **Ollama** (free local AI), optional **OpenAI**, optional **Google Cloud** voices and translation, and an **offline demo** fallback.
 
-The chat interface runs in the browser, while your secret API key stays safe on the server.
+Secrets stay on the server — never in the browser.
+
+## Features
+
+- Streaming replies, markdown, code blocks, tables, export (MD/TXT/JSON)
+- Multiple conversations (sidebar, search, tags, pin, rename)
+- Settings: personality presets, temperature, length, themes, accents
+- Voice input (mic) and read-aloud (TTS)
+- **Google + browser voices** — English accents and many languages (incl. Punjabi)
+- **Translation** — your language → English for the AI; English → voice language for speech
+- **Punjabi chat mode** — one-click settings preset in the modal
+- File attachments (text + PDF), regenerate, edit & resend, usage estimates
+- Responsive layout (phone drawer, tablet, desktop)
 
 ## How it works
 
 ```
-Browser (chat UI)  ─►  Express server  ─►  OpenAI API
-   public/*.* files       server.js          (the AI model)
+Browser (public/)  ──►  Express (server.js)  ──►  Ollama / OpenAI
+                              │
+                              ├──► Google TTS + Translation (optional)
+                              └──► Offline demo (no AI installed)
 ```
-
-1. You type a message in the browser (`public/`).
-2. The frontend sends the conversation to the backend (`/api/chat`).
-3. The backend forwards it to OpenAI using your secret key.
-4. The AI's reply is returned and displayed in the chat.
 
 ## Project structure
 
 ```
 ai-chatbot-web-application/
-├── public/            # Frontend (what the browser loads)
-│   ├── index.html     # Page structure
-│   ├── styles.css     # Styling
-│   └── app.js         # Chat logic in the browser
-├── server.js          # Node.js/Express backend + OpenAI call
-├── package.json       # Project info & dependencies
-├── .env.example       # Template for your environment variables
-└── .gitignore
+├── public/
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js           # Frontend (monolithic)
+├── server.js            # API + AI providers + Google TTS/translate
+├── tests/smoke.mjs      # Automated smoke tests
+├── docs/
+│   └── GOOGLE_CLOUD_SETUP.md
+├── .env.example
+└── package.json
 ```
 
 ## Setup
@@ -38,33 +49,76 @@ ai-chatbot-web-application/
 npm install
 ```
 
-### 2. Add your OpenAI API key
-
-Copy the example env file and fill in your key:
+### 2. Environment
 
 ```bash
 copy .env.example .env   # Windows
-# cp .env.example .env    # macOS/Linux
+# cp .env.example .env   # macOS/Linux
 ```
 
-Then open `.env` and set `OPENAI_API_KEY` to your real key from
-<https://platform.openai.com/api-keys>.
+**Minimum (local AI):** install [Ollama](https://ollama.com), then:
 
-### 3. Start the server
+```bash
+ollama pull llama3.2:1b
+```
+
+Set `OLLAMA_MODEL=llama3.2:1b` in `.env` if needed.
+
+**Optional OpenAI:** set `OPENAI_API_KEY` in `.env`.
+
+**Optional voices + translation:** set `GOOGLE_CLOUD_TTS_API_KEY` — see [docs/GOOGLE_CLOUD_SETUP.md](docs/GOOGLE_CLOUD_SETUP.md).
+
+### 3. Start
 
 ```bash
 npm start
 ```
 
-Then open <http://localhost:3000> in your browser and start chatting.
+Open the URL printed in the terminal (default `http://localhost:3000`).
 
-> Tip: use `npm run dev` to auto-restart the server when you edit `server.js`.
+```bash
+npm run dev    # auto-restart on server.js changes
+npm test       # smoke tests (server should be running, or start it first)
+```
+
+## Voice & translation quick start
+
+### Punjabi chat (recommended preset)
+
+1. Add Google API key (for translation + Google Punjabi voices) — see docs above.
+2. Open **Settings** → click **Punjabi chat mode**.
+3. Click **Save**.
+
+You type Punjabi → AI gets English; replies can be read aloud in Punjabi.
+
+### Manual setup
+
+| Goal | Settings |
+|------|----------|
+| Type Punjabi, AI reads English | Translate to English + **Punjabi → English only** |
+| See English under your messages | Show English translation |
+| Hear replies in Punjabi | Read aloud + Translate English replies to voice language + Google/Browser Punjabi voice |
+
+### All languages in the voice dropdown
+
+Requires `GOOGLE_CLOUD_TTS_API_KEY`. Use the voice search box to filter by language or accent.
+
+## API endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/chat` | Stream chat (Ollama / OpenAI / offline) |
+| `GET /api/models` | List available models |
+| `GET /api/speech/voices` | Google + catalog metadata |
+| `POST /api/translate` | Translate text (needs Google key) |
+| `POST /api/speech/synthesize` | Google TTS audio (needs Google key) |
 
 ## Notes
 
-- **Keep your API key secret.** It lives only in `.env` (which is git-ignored) and is used on the server — never in the browser.
-- **Costs:** OpenAI charges per token (chunk of text). `gpt-4o-mini` is a low-cost default. Monitor usage in your OpenAI dashboard.
-- **Customizing personality:** edit the `SYSTEM_PROMPT` in `server.js` to change how the bot behaves.
+- **API keys** live only in `.env` (git-ignored).
+- **History** is stored in the browser (`localStorage`), not on the server.
+- **Ollama on another drive:** set `OLLAMA_MODELS` before starting Ollama (see `.env.example`).
+- **Customize default personality:** edit `SYSTEM_PROMPT` in `server.js` or use Settings.
 
 ## License
 

@@ -1,6 +1,6 @@
 # AI Chatbot Web Application — Project Plan & Documentation
 
-_Last updated: 8 June 2026_
+_Last updated: 10 June 2026_
 
 This document records **what** we are building, **why**, **how** it was produced, the
 decisions we made along the way, the current status, and the steps that remain.
@@ -140,14 +140,22 @@ Guiding principle: **foundation first, features later.**
 
 ---
 
-## 10. Remaining Steps
+## 10. Setup checklist (current)
 
-1. Install **Ollama** (free local AI runtime).
-2. Adapt `server.js` to talk to Ollama's local endpoint
-   (`http://localhost:11434`) instead of requiring an OpenAI key.
-3. Update `.env` to select the local model.
-4. Download a small model, e.g. `ollama pull llama3.2`.
-5. Restart the server and run the end-to-end test (send a message, get a reply).
+| Step | Status |
+|------|--------|
+| Ollama local AI (`OLLAMA_URL`, `ollama pull`) | ✅ Supported |
+| OpenAI as optional cloud provider | ✅ Supported |
+| Google TTS + Translation (all language voices) | ✅ Optional — see `docs/GOOGLE_CLOUD_SETUP.md` |
+| `.env` configuration | ✅ `.env.example` template |
+| Automated smoke tests (`npm test`) | ✅ `tests/smoke.mjs` |
+| README + project docs | ✅ Updated |
+
+**Your action items (not code):**
+
+1. Copy `.env.example` → `.env` and set variables you need.
+2. For Google voices/translation: paste `GOOGLE_CLOUD_TTS_API_KEY` and restart the server.
+3. Run `npm start`, then `npm test` to verify.
 
 ---
 
@@ -258,17 +266,32 @@ These interactive/UX features have been built on top of the core app.
   `maxTokens` per request (applied to both the OpenAI and Ollama providers).
 - `GET /api/models` reports the active provider and selectable models
   (from Ollama's `/api/tags`, or a static OpenAI list).
+- `GET /api/speech/voices` — Google voice catalog (cached) + browser metadata.
+- `POST /api/translate` — Cloud Translation (needs Google API key).
+- `POST /api/speech/synthesize` — Google TTS MP3 (needs Google API key).
+
+### Batch 4 — Multilingual voice & translation
+
+- **Google Cloud TTS** — dynamic voice catalog; English accents; Punjabi male/female;
+  all languages when API key is set.
+- **Browser voices** — grouped by language; dedicated **Browser — Punjabi** section.
+- **Translation toggles** — user messages → English for the AI; optional English
+  translation badge under messages; English replies → voice language for speech.
+- **Source language picker** — e.g. **Punjabi → English only** (other languages unchanged).
+- **Punjabi chat mode** — one-click preset in Settings (voice + translation + read-aloud).
+- **Responsive polish** — tablet drawer at 960px, safe areas, 44px touch targets.
+- **Docs** — `README.md`, `docs/GOOGLE_CLOUD_SETUP.md`, smoke tests.
 
 ## 12. Future Enhancements (Optional)
 
 - **Deploy online** (e.g. Render, Railway) so others can use it.
 - **Persist history in a database** (instead of just the browser).
-- **Markdown tables** and **LaTeX/math** rendering.
+- **LaTeX/math** rendering in replies.
 - **Image generation** from prompts.
-- **Word/character counter**, **keyboard shortcuts**, **retry button**.
 - **User accounts** and per-user saved chats.
 - **Rate limiting** to protect the server from abuse.
 - **Install as a PWA** (installable, works offline).
+- **Gentle frontend module split** (`voice.js` / `chat.js` as script tags, no build step).
 
 ---
 
