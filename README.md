@@ -1,77 +1,71 @@
 # AI Chatbot Web Application
 
-A local-first AI chat web app: **HTML/CSS/JavaScript** frontend, **Node.js/Express** backend, and **Ollama** (or OpenAI) for replies. Optional **Google Cloud** powers multilingual voices and translation.
+A simple AI chatbot web application: a plain **HTML / CSS / JavaScript** frontend and a small **Node.js / Express** backend that talks to **OpenAI's** language models.
 
-## Quick start
+The chat interface runs in the browser, while your secret API key stays safe on the server.
 
-```powershell
-cd "d:\Baljinder Documents\ai-chatbot-web-application"
+## How it works
+
+```
+Browser (chat UI)  ─►  Express server  ─►  OpenAI API
+   public/*.* files       server.js          (the AI model)
+```
+
+1. You type a message in the browser (`public/`).
+2. The frontend sends the conversation to the backend (`/api/chat`).
+3. The backend forwards it to OpenAI using your secret key.
+4. The AI's reply is returned and displayed in the chat.
+
+## Project structure
+
+```
+ai-chatbot-web-application/
+├── public/            # Frontend (what the browser loads)
+│   ├── index.html     # Page structure
+│   ├── styles.css     # Styling
+│   └── app.js         # Chat logic in the browser
+├── server.js          # Node.js/Express backend + OpenAI call
+├── package.json       # Project info & dependencies
+├── .env.example       # Template for your environment variables
+└── .gitignore
+```
+
+## Setup
+
+### 1. Install dependencies
+
+```bash
 npm install
+```
+
+### 2. Add your OpenAI API key
+
+Copy the example env file and fill in your key:
+
+```bash
+copy .env.example .env   # Windows
+# cp .env.example .env    # macOS/Linux
+```
+
+Then open `.env` and set `OPENAI_API_KEY` to your real key from
+<https://platform.openai.com/api-keys>.
+
+### 3. Start the server
+
+```bash
 npm start
 ```
 
-Open **http://localhost:3567** (or the port in your `.env`).
+Then open <http://localhost:3000> in your browser and start chatting.
 
-## Configuration (`.env`)
+> Tip: use `npm run dev` to auto-restart the server when you edit `server.js`.
 
-| Variable | Purpose |
-|----------|---------|
-| `PORT` | Server port (default **3567** in this project) |
-| `OLLAMA_URL` | Local Ollama API (default `http://localhost:11434`) |
-| `OLLAMA_MODEL` | Model name, e.g. `llama3.2:1b` |
-| `OPENAI_API_KEY` | Optional cloud AI (leave placeholder to skip) |
-| `GOOGLE_CLOUD_TTS_API_KEY` | Optional — all Google voices + translation |
+## Notes
 
-### Ollama on drive D: (low disk space on C:)
+- **Keep your API key secret.** It lives only in `.env` (which is git-ignored) and is used on the server — never in the browser.
+- **Costs:** OpenAI charges per token (chunk of text). `gpt-4o-mini` is a low-cost default. Monitor usage in your OpenAI dashboard.
+- **Customizing personality:** edit the `SYSTEM_PROMPT` in `server.js` to change how the bot behaves.
 
-1. Set environment variable `OLLAMA_MODELS=D:\OllamaModels` (or your path).
-2. Install/start Ollama from `D:\Ollama` if needed.
-3. Pull the model: `ollama pull llama3.2:1b`
-4. Restart Ollama, then `npm start`.
+## License
 
-### Google voices (English accents, Punjabi, all languages)
-
-1. In [Google Cloud Console](https://console.cloud.google.com/), enable:
-   - **Cloud Text-to-Speech API**
-   - **Cloud Translation API**
-2. Create an API key.
-3. In `.env`:
-   ```env
-   GOOGLE_CLOUD_TTS_API_KEY=your_key_here
-   ```
-4. Restart the server. You should see: `Google TTS + Translation: enabled (...)`
-
-Without the key, **English browser voices** still work; Google Punjabi and other languages need the key.
-
-## Frontend structure
-
-Code is split into ES modules under `public/js/`:
-
-| File | Role |
-|------|------|
-| `storage.js` | `localStorage`, conversations |
-| `voice.js` | TTS, voice picker, speech modes |
-| `settings.js` | Settings modal, themes, export |
-| `chat.js` | Messages, sidebar, streaming chat |
-| `main.js` | Boot / startup |
-| `app.js` | Entry (`import { boot } from "./js/main.js"`) |
-
-## Speech modes (Settings)
-
-One-click presets:
-
-- **English (US)** / **English (UK)** — read in that accent
-- **English reply + Punjabi speech** — AI gets English; replies shown in English; 🔊 speaks Punjabi
-
-Your chosen voice per language is remembered in `voiceByLang` when you pick manually.
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm start` | Run server |
-| `npm run dev` | Run with `--watch` (auto-restart on `server.js` changes) |
-
-## Project docs
-
-See `PROJECT_PLAN.md` for architecture, features, and history.
+MIT
