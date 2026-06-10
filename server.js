@@ -36,38 +36,256 @@ const rawTtsKey = process.env.GOOGLE_CLOUD_TTS_API_KEY || "";
 const GOOGLE_TTS_KEY =
   rawTtsKey && rawTtsKey !== "PASTE_YOUR_KEY_HERE" ? rawTtsKey : null;
 
-const GOOGLE_TTS_VOICES = [
+const VOICE_CACHE_MS = 60 * 60 * 1000;
+const VOICE_TIER_RANK = { Studio: 0, Neural2: 1, Wavenet: 2, Standard: 3, Polyglot: 4 };
+const ENGLISH_ACCENT_LABELS = {
+  "en-US": "United States",
+  "en-GB": "United Kingdom",
+  "en-AU": "Australia",
+  "en-IN": "India",
+  "en-CA": "Canada",
+  "en-IE": "Ireland",
+  "en-NZ": "New Zealand",
+  "en-PH": "Philippines",
+  "en-SG": "Singapore",
+  "en-ZA": "South Africa",
+  "en-GB-WLS": "Wales",
+};
+
+let googleVoiceCache = null;
+let googleVoiceCacheTime = 0;
+
+// Guaranteed Google Punjabi voices (male + female, Wavenet + Standard).
+const GOOGLE_PUNJABI_VOICES = [
   {
     id: "pa-IN-Wavenet-A",
-    label: "Google Punjabi — Female (Wavenet)",
     lang: "pa-IN",
+    gender: "female",
+    tier: "Wavenet",
+    label: "Google Punjabi — Female (Wavenet)",
   },
   {
     id: "pa-IN-Wavenet-B",
-    label: "Google Punjabi — Male (Wavenet)",
     lang: "pa-IN",
+    gender: "male",
+    tier: "Wavenet",
+    label: "Google Punjabi — Male (Wavenet)",
   },
   {
     id: "pa-IN-Standard-A",
-    label: "Google Punjabi — Female (Standard)",
     lang: "pa-IN",
+    gender: "female",
+    tier: "Standard",
+    label: "Google Punjabi — Female (Standard)",
   },
   {
     id: "pa-IN-Standard-B",
-    label: "Google Punjabi — Male (Standard)",
     lang: "pa-IN",
-  },
-  {
-    id: "en-US-Neural2-D",
-    label: "Google English US — Male (Neural2)",
-    lang: "en-US",
-  },
-  {
-    id: "en-US-Neural2-F",
-    label: "Google English US — Female (Neural2)",
-    lang: "en-US",
+    gender: "male",
+    tier: "Standard",
+    label: "Google Punjabi — Male (Standard)",
   },
 ];
+
+function isPunjabiLang(lang) {
+  return (lang || "").toLowerCase().startsWith("pa");
+}
+
+function punjabiFriendlyLabel(voice) {
+  const g =
+    voice.gender === "male"
+      ? "Male"
+      : voice.gender === "female"
+      ? "Female"
+      : "Voice";
+  return `Google Punjabi — ${g} (${voice.tier})`;
+}
+
+function voiceTier(name) {
+  if (name.includes("Studio")) return "Studio";
+  if (name.includes("Neural2")) return "Neural2";
+  if (name.includes("Wavenet")) return "Wavenet";
+  if (name.includes("Polyglot")) return "Polyglot";
+  return "Standard";
+}
+
+function formatVoiceLabel(lang, name, gender, tier) {
+  const g =
+    gender === "male" ? "Male" : gender === "female" ? "Female" : "Voice";
+  return `${g} (${tier}) — ${name}`;
+}
+
+function pickBestVoices(rawVoices) {
+  const byKey = new Map();
+  for (const v of rawVoices) {
+    const key = `${v.lang}|${v.gender}|${v.tier}`;
+    if (!byKey.has(key)) byKey.set(key, v);
+  }
+  const byLang = new Map();
+  for (const v of byKey.values()) {
+    if (!byLang.has(v.lang)) byLang.set(v.lang, []);
+    byLang.get(v.lang).push(v);
+  }
+  const picked = [];
+  for (const list of byLang.values()) {
+    list.sort(
+      (a, b) =>
+        (VOICE_TIER_RANK[a.tier] ?? 9) - (VOICE_TIER_RANK[b.tier] ?? 9)
+    );
+    const seen = new Set();
+    for (const v of list) {
+      const g = v.gender || "neutral";
+      if (seen.has(g)) continue;
+      seen.add(g);
+      picked.push(v);
+      if (seen.size >= 2) break;
+    }
+  }
+  return picked;
+}
+
+function languageDisplayName(langCode, langNames) {
+  const base = langCode.split("-")[0];
+  try {
+    return langNames.of(base) || langCode;
+  } catch {
+    return langCode;
+  }
+}
+
+async function fetchGoogleVoiceCatalog() {
+  if (
+    googleVoiceCache &&
+    Date.now() - googleVoiceCacheTime < VOICE_CACHE_MS
+  ) {
+    return googleVoiceCache;
+  }
+
+  const url = `https://texttospeech.googleapis.com/v1/voices?key=${GOOGLE_TTS_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Failed to fetch Google voices");
+  }
+
+  const langNames = new Intl.DisplayNames(["en"], { type: "language" });
+  const raw = [];
+  for (const v of data.voices || []) {
+    const lang = v.languageCodes?.[0];
+    const id = v.name;
+    if (!lang || !id) continue;
+    const gender = (v.ssmlGender || "NEUTRAL").toLowerCase();
+    const tier = voiceTier(id);
+    raw.push({
+      id,
+      lang,
+      gender,
+      tier,
+      label: formatVoiceLabel(lang, id, gender, tier),
+    });
+  }
+
+  const googleVoices = pickBestVoices(raw);
+  const englishAccentGroups = [];
+  const voiceGroups = [];
+  const enByAccent = new Map();
+  const otherByLang = new Map();
+
+  for (const v of googleVoices) {
+    const base = v.lang.split("-")[0].toLowerCase();
+    if (base === "en") {
+      if (!enByAccent.has(v.lang)) enByAccent.set(v.lang, []);
+      enByAccent.get(v.lang).push(v);
+    } else {
+      if (!otherByLang.has(v.lang)) otherByLang.set(v.lang, []);
+      otherByLang.get(v.lang).push(v);
+    }
+  }
+
+  for (const [langCode, voices] of enByAccent) {
+    const accent = ENGLISH_ACCENT_LABELS[langCode] || langCode;
+    englishAccentGroups.push({
+      langCode,
+      label: `English — ${accent}`,
+      voices,
+    });
+  }
+  englishAccentGroups.sort((a, b) => a.label.localeCompare(b.label));
+
+  for (const [langCode, voices] of otherByLang) {
+    voiceGroups.push({
+      langCode,
+      label: languageDisplayName(langCode, langNames),
+      voices,
+    });
+  }
+  voiceGroups.sort((a, b) => a.label.localeCompare(b.label));
+
+  const catalog = {
+    googleVoices,
+    englishAccentGroups,
+    voiceGroups,
+    languageCount: englishAccentGroups.length + voiceGroups.length,
+    voiceCount: googleVoices.length,
+  };
+  applyPunjabiVoices(catalog);
+
+  googleVoiceCache = catalog;
+  googleVoiceCacheTime = Date.now();
+  return googleVoiceCache;
+}
+
+function applyPunjabiVoices(catalog) {
+  const byId = new Map(GOOGLE_PUNJABI_VOICES.map((v) => [v.id, { ...v }]));
+
+  for (const v of catalog.googleVoices) {
+    if (!isPunjabiLang(v.lang)) continue;
+    byId.set(v.id, {
+      ...v,
+      label: punjabiFriendlyLabel(v),
+    });
+  }
+
+  const punjabiVoices = [...byId.values()].sort((a, b) => {
+    const tier =
+      (VOICE_TIER_RANK[a.tier] ?? 9) - (VOICE_TIER_RANK[b.tier] ?? 9);
+    if (tier !== 0) return tier;
+    return (a.gender || "").localeCompare(b.gender || "");
+  });
+
+  catalog.voiceGroups = catalog.voiceGroups.filter(
+    (g) => !isPunjabiLang(g.langCode)
+  );
+
+  const mergedIds = new Set(catalog.googleVoices.map((v) => v.id));
+  for (const pv of punjabiVoices) {
+    if (!mergedIds.has(pv.id)) {
+      catalog.googleVoices.push(pv);
+      mergedIds.add(pv.id);
+    } else {
+      const idx = catalog.googleVoices.findIndex((x) => x.id === pv.id);
+      if (idx >= 0) catalog.googleVoices[idx] = { ...catalog.googleVoices[idx], ...pv };
+    }
+  }
+
+  catalog.punjabiGroup = {
+    langCode: "pa-IN",
+    label: "Punjabi",
+    voices: punjabiVoices,
+  };
+  catalog.punjabiVoices = punjabiVoices;
+  catalog.languageCount =
+    catalog.englishAccentGroups.length + catalog.voiceGroups.length + 1;
+  catalog.voiceCount = catalog.googleVoices.length;
+}
+
+function findGoogleVoice(voiceId) {
+  if (googleVoiceCache?.googleVoices) {
+    const hit = googleVoiceCache.googleVoices.find((v) => v.id === voiceId);
+    if (hit) return hit;
+  }
+  return GOOGLE_PUNJABI_VOICES.find((v) => v.id === voiceId) || null;
+}
 
 // --- Provider 1: OpenAI --------------------------------------------------
 // Streams reply text chunks to the client via the supplied write() callback.
@@ -227,12 +445,88 @@ app.get("/api/models", async (req, res) => {
   return res.json({ provider: "offline", models: ["offline"], current: "offline" });
 });
 
-// Google Cloud TTS voices (Punjabi + English) when API key is configured.
-app.get("/api/speech/voices", (req, res) => {
-  res.json({
-    googleEnabled: !!GOOGLE_TTS_KEY,
-    googleVoices: GOOGLE_TTS_KEY ? GOOGLE_TTS_VOICES : [],
-  });
+// Google Cloud TTS — all languages; English grouped by accent.
+app.get("/api/speech/voices", async (req, res) => {
+  if (!GOOGLE_TTS_KEY) {
+    return res.json({
+      googleEnabled: false,
+      translateEnabled: false,
+      googleVoices: [],
+      englishAccentGroups: [],
+      voiceGroups: [],
+      languageCount: 0,
+      voiceCount: 0,
+    });
+  }
+  try {
+    const catalog = await fetchGoogleVoiceCatalog();
+    return res.json({
+      googleEnabled: true,
+      translateEnabled: true,
+      googleVoices: catalog.googleVoices,
+      englishAccentGroups: catalog.englishAccentGroups,
+      punjabiGroup: catalog.punjabiGroup,
+      punjabiVoices: catalog.punjabiVoices,
+      voiceGroups: catalog.voiceGroups,
+      languageCount: catalog.languageCount,
+      voiceCount: catalog.voiceCount,
+    });
+  } catch (err) {
+    console.error("Google voices error:", err.message);
+    return res.json({
+      googleEnabled: false,
+      translateEnabled: !!GOOGLE_TTS_KEY,
+      error: err.message,
+      googleVoices: [],
+      englishAccentGroups: [],
+      voiceGroups: [],
+      languageCount: 0,
+      voiceCount: 0,
+    });
+  }
+});
+
+app.post("/api/translate", async (req, res) => {
+  if (!GOOGLE_TTS_KEY) {
+    return res.status(503).json({
+      error:
+        "Translation is not configured. Add GOOGLE_CLOUD_TTS_API_KEY to your .env file.",
+    });
+  }
+  const { text, target, source } = req.body;
+  if (!text || typeof text !== "string") {
+    return res.status(400).json({ error: "Request must include 'text'." });
+  }
+  const targetLang =
+    typeof target === "string" && target.trim() ? target.trim() : "en";
+  const plain = text.slice(0, 5000);
+
+  try {
+    const params = new URLSearchParams();
+    params.append("q", plain);
+    params.append("target", targetLang);
+    if (typeof source === "string" && source.trim()) {
+      params.append("source", source.trim());
+    }
+    const url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TTS_KEY}`;
+    const trRes = await fetch(url, { method: "POST", body: params });
+    const data = await trRes.json();
+    if (!trRes.ok) {
+      const msg = data.error?.message || "Translation request failed";
+      return res.status(500).json({ error: msg });
+    }
+    const hit = data.data?.translations?.[0];
+    if (!hit) {
+      return res.status(500).json({ error: "No translation returned." });
+    }
+    return res.json({
+      translatedText: hit.translatedText,
+      detectedSourceLanguage: hit.detectedSourceLanguage || null,
+    });
+  } catch (err) {
+    console.error("Translate error:", err.message);
+    return res.status(500).json({ error: "Translation request failed." });
+  }
 });
 
 app.post("/api/speech/synthesize", async (req, res) => {
@@ -247,7 +541,14 @@ app.post("/api/speech/synthesize", async (req, res) => {
   if (!text || typeof text !== "string") {
     return res.status(400).json({ error: "Request must include 'text'." });
   }
-  const voice = GOOGLE_TTS_VOICES.find((v) => v.id === voiceName);
+
+  try {
+    if (!googleVoiceCache) await fetchGoogleVoiceCatalog();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+
+  const voice = findGoogleVoice(voiceName);
   if (!voice) {
     return res.status(400).json({ error: "Unknown Google voice." });
   }
@@ -358,6 +659,13 @@ app.listen(PORT, async () => {
   console.log(`AI chatbot running at http://localhost:${PORT}`);
   console.log(`Active AI provider: ${label}`);
   if (GOOGLE_TTS_KEY) {
-    console.log("Google Text-to-Speech: enabled (Punjabi + English voices)");
+    try {
+      const catalog = await fetchGoogleVoiceCatalog();
+      console.log(
+        `Google TTS + Translation: enabled (${catalog.languageCount} languages, ${catalog.voiceCount} voices)`
+      );
+    } catch (err) {
+      console.log("Google TTS key set but voice catalog failed:", err.message);
+    }
   }
 });

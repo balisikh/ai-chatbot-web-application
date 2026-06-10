@@ -870,6 +870,17 @@ textarea#system-prompt {
 .voice-hint.hidden {
   display: none;
 }
+.voice-select {
+  max-height: 220px;
+}
+.translation-badge {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  line-height: 1.45;
+}
 .toggle-row {
   display: flex;
   align-items: center;

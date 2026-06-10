@@ -15,12 +15,13 @@ try {
   const data = await voicesRes.json();
   check("Speech voices API responds", voicesRes.ok());
   if (data.googleEnabled) {
-    const en = data.englishVoices?.length || 0;
-    const pa = data.punjabiVoices?.length || 0;
-    check("English Google voices listed", en >= 2, `${en}`);
-    check("Punjabi Google voices listed", pa >= 2, `${pa}`);
-    const hasMalePa = data.punjabiVoices.some((v) => v.gender === "male");
-    const hasFemalePa = data.punjabiVoices.some((v) => v.gender === "female");
+    const en = data.englishAccentGroups?.length || 0;
+    const pa = data.punjabiVoices?.length || data.punjabiGroup?.voices?.length || 0;
+    check("English accent groups listed", en >= 1, `${en}`);
+    check("Google Punjabi voices listed", pa >= 2, `${pa}`);
+    const punjabi = data.punjabiVoices || data.punjabiGroup?.voices || [];
+    const hasMalePa = punjabi.some((v) => v.gender === "male");
+    const hasFemalePa = punjabi.some((v) => v.gender === "female");
     check("Punjabi male + female", hasMalePa && hasFemalePa);
   } else {
     console.log("INFO  Google API key not set — voice groups appear after adding key");

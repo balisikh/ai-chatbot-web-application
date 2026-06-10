@@ -130,9 +130,31 @@
           Read replies aloud
         </label>
 
+        <label class="toggle-row">
+          <input type="checkbox" id="translate-to-english" />
+          Translate my messages to English (for the AI)
+        </label>
+
+        <label class="toggle-row">
+          <input type="checkbox" id="show-translation" />
+          Show English translation under my messages
+        </label>
+
+        <label class="toggle-row">
+          <input type="checkbox" id="translate-for-speech" />
+          Translate replies to match voice language when speaking
+        </label>
+
         <div id="tts-controls">
-          <label for="voice-select">Voice</label>
-          <select id="voice-select" class="settings-input"></select>
+          <label for="voice-select">Voice (English accents + all languages)</label>
+          <input
+            id="voice-search"
+            class="search-input"
+            type="search"
+            placeholder="Filter voices (e.g. Punjabi, Hindi, United Kingdom)..."
+            autocomplete="off"
+          />
+          <select id="voice-select" class="settings-input voice-select"></select>
           <p id="voice-hint" class="voice-hint hidden"></p>
 
           <label for="speech-rate">
