@@ -34,7 +34,10 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 // Optional Google Cloud Text-to-Speech (real "Google" voices, including Punjabi).
 const rawTtsKey = process.env.GOOGLE_CLOUD_TTS_API_KEY || "";
 const GOOGLE_TTS_KEY =
-  rawTtsKey && rawTtsKey !== "PASTE_YOUR_KEY_HERE" ? rawTtsKey : null;
+  rawTtsKey.trim() &&
+  rawTtsKey !== "PASTE_YOUR_KEY_HERE"
+    ? rawTtsKey.trim()
+    : null;
 
 const VOICE_CACHE_MS = 60 * 60 * 1000;
 const VOICE_TIER_RANK = { Studio: 0, Neural2: 1, Wavenet: 2, Standard: 3, Polyglot: 4 };

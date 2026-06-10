@@ -146,15 +146,41 @@
         </label>
 
         <div id="tts-controls">
-          <label for="voice-select">Voice (English accents + all languages)</label>
+          <label>Quick speech modes</label>
+          <div id="speech-mode-row" class="speech-mode-row"></div>
+
+          <label for="voice-search">Voice</label>
+          <p class="voice-section-desc">
+            Tap a chip or type to filter, then choose a voice from the list.
+          </p>
+          <div id="voice-lang-chips" class="voice-lang-chips"></div>
           <input
             id="voice-search"
             class="search-input"
             type="search"
-            placeholder="Filter voices (e.g. Punjabi, Hindi, United Kingdom)..."
+            placeholder="Filter (e.g. United Kingdom, Punjabi, Hindi, es-ES)..."
             autocomplete="off"
           />
-          <select id="voice-select" class="settings-input voice-select"></select>
+          <div class="voice-actions-row">
+            <span id="voice-match-count" class="voice-match-count"></span>
+            <button type="button" id="preview-voice" class="icon-btn">Preview voice</button>
+          </div>
+          <div id="voice-picker" class="voice-picker">
+            <button
+              type="button"
+              id="voice-picker-trigger"
+              class="voice-picker-trigger"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+            >
+              <span id="voice-picker-label" class="voice-picker-label">Default voice</span>
+              <span class="voice-picker-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div id="voice-picker-panel" class="voice-picker-panel hidden" role="listbox">
+              <div id="voice-picker-list" class="voice-picker-list"></div>
+            </div>
+          </div>
+          <input type="hidden" id="voice-select" value="" />
           <p id="voice-hint" class="voice-hint hidden"></p>
 
           <label for="speech-rate">
@@ -172,6 +198,6 @@
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
