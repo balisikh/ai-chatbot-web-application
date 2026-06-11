@@ -873,11 +873,39 @@ textarea#system-prompt {
 .speech-mode-block {
   margin: 8px 0 10px;
 }
+.speech-mode-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
 .speech-mode-label {
-  display: block;
   font-size: 0.82rem;
   color: var(--muted);
-  margin-bottom: 6px;
+}
+.speech-mode-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0 0 8px;
+}
+.speech-mode-status {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.speech-mode-status.online {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.speech-mode-status.offline {
+  color: var(--muted);
+}
+.speech-mode-status.hidden {
+  display: none;
 }
 .speech-mode-search {
   margin-bottom: 8px;

@@ -53,6 +53,10 @@ const translateForSpeechInput = document.getElementById("translate-for-speech");
 const speechModeEnglishEl = document.getElementById("speech-mode-english");
 const speechModeLanguagesEl = document.getElementById("speech-mode-languages");
 const speechModeLangSearchInput = document.getElementById("speech-mode-lang-search");
+const speechModeEnglishHint = document.getElementById("speech-mode-english-hint");
+const speechModeLanguagesTitle = document.getElementById("speech-mode-languages-title");
+const speechModeLanguagesHint = document.getElementById("speech-mode-languages-hint");
+const speechModeGoogleStatus = document.getElementById("speech-mode-google-status");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -126,6 +130,7 @@ let googleEnglishAccentGroups = [];
 let googlePunjabiGroup = null;
 let googleVoiceGroups = [];
 let googleTranslateEnabled = false;
+let googleCatalogOnline = false;
 let cachedLanguageModes = [];
 let googleVoiceCount = 0;
 let googleLanguageCount = 0;
@@ -1303,6 +1308,7 @@ async function loadGoogleVoices() {
   try {
     const res = await fetch("/api/speech/voices");
     const data = await res.json();
+    googleCatalogOnline = !!data.googleEnabled;
     googleVoices = data.googleEnabled ? data.googleVoices || [] : [];
     googleEnglishAccentGroups = data.englishAccentGroups || [];
     googlePunjabiGroup = data.punjabiGroup || null;
@@ -1314,6 +1320,7 @@ async function loadGoogleVoices() {
       googleEnglishAccentGroups.length + googleVoiceGroups.length;
     if (data.error) showToast("Google voices: " + data.error);
   } catch {
+    googleCatalogOnline = false;
     googleVoices = [];
     googleEnglishAccentGroups = [];
     googlePunjabiGroup = null;
@@ -1684,6 +1691,33 @@ function languageModeMatchesFilter(mode, query) {
   return haystack.includes(query);
 }
 
+function updateSpeechModeLabels() {
+  if (speechModeEnglishHint) {
+    speechModeEnglishHint.textContent =
+      "English only — turns translation off and picks an English accent voice.";
+  }
+  const count = cachedLanguageModes.length;
+  if (speechModeLanguagesTitle) {
+    speechModeLanguagesTitle.textContent = googleCatalogOnline
+      ? `Quick setup — Google languages (${count})`
+      : `Quick setup — languages (offline preview, ${count})`;
+  }
+  if (speechModeLanguagesHint) {
+    speechModeLanguagesHint.textContent = googleCatalogOnline
+      ? "Click a language: you type in that language, the AI gets English, and read-aloud can speak that language."
+      : "Limited list. Add GOOGLE_CLOUD_TTS_API_KEY to .env (enable Text-to-Speech + Translation), then restart the server.";
+  }
+  if (speechModeGoogleStatus) {
+    speechModeGoogleStatus.classList.remove("hidden", "online", "offline");
+    speechModeGoogleStatus.textContent = googleCatalogOnline
+      ? "Google online"
+      : "Offline preview";
+    speechModeGoogleStatus.classList.add(
+      googleCatalogOnline ? "online" : "offline"
+    );
+  }
+}
+
 function renderLanguageModeChips(query = "") {
   if (!speechModeLanguagesEl) return;
   speechModeLanguagesEl.innerHTML = "";
@@ -1723,6 +1757,7 @@ function renderSpeechModeChips() {
   for (const mode of englishModes) addChip(speechModeEnglishEl, mode);
   const filterQuery = speechModeLangSearchInput?.value || "";
   renderLanguageModeChips(filterQuery);
+  updateSpeechModeLabels();
 }
 
 function pickVoiceForMode(mode) {
@@ -1789,13 +1824,25 @@ function applySpeechMode(mode) {
   }
   populateVoices();
   const voiceOk = pickVoiceForMode(mode);
-  if (voiceOk) {
-    showToast(`${mode.label} applied — click Save to keep`);
-  } else if (!mode.isEnglish && !googleTranslateEnabled) {
-    showToast(`${mode.label} applied — translation needs server configuration`);
+  if (mode.isEnglish) {
+    showToast(
+      voiceOk
+        ? `${mode.label}: English only (translation off) — click Save`
+        : `${mode.label}: translation off — pick a voice below, then Save`
+    );
+    return;
+  }
+  if (voiceOk && googleTranslateEnabled) {
+    showToast(
+      `${mode.label}: translate + speak on — type in ${mode.label}, AI gets English — click Save`
+    );
+  } else if (!googleTranslateEnabled) {
+    showToast(
+      `${mode.label}: voice set — add Google API key in .env for translation`
+    );
   } else {
     showToast(
-      `${mode.label} applied — pick a matching voice below, then Save`
+      `${mode.label}: translate on — pick a matching voice below, then Save`
     );
   }
 }

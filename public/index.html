@@ -129,13 +129,20 @@
         </label>
 
         <div class="speech-mode-block">
-          <span class="speech-mode-label">Quick setup — English accents</span>
+          <span id="speech-mode-english-title" class="speech-mode-label">
+            Quick setup — English accents
+          </span>
+          <p id="speech-mode-english-hint" class="speech-mode-hint"></p>
           <div id="speech-mode-english" class="speech-mode-chips"></div>
         </div>
         <div class="speech-mode-block">
-          <span class="speech-mode-label">
-            Quick setup — all Google languages (speak + translate to English)
-          </span>
+          <div class="speech-mode-title-row">
+            <span id="speech-mode-languages-title" class="speech-mode-label">
+              Quick setup — languages
+            </span>
+            <span id="speech-mode-google-status" class="speech-mode-status hidden"></span>
+          </div>
+          <p id="speech-mode-languages-hint" class="speech-mode-hint"></p>
           <input
             id="speech-mode-lang-search"
             class="search-input speech-mode-search"

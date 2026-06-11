@@ -41,6 +41,10 @@ async function main() {
     const enCount = await page.locator("#speech-mode-english .speech-mode-chip").count();
     const langFilter = await page.locator("#speech-mode-lang-search").count();
     check("Language quick-setup filter exists", langFilter === 1);
+    const langHint = await page.locator("#speech-mode-languages-hint").innerText();
+    check("Language quick-setup hint visible", langHint.length > 10);
+    const status = await page.locator("#speech-mode-google-status").innerText();
+    check("Google status badge visible", /offline|online/i.test(status));
     const langCount = await page.locator("#speech-mode-languages .speech-mode-chip").count();
     check("English accent chips rendered", enCount >= 4, `${enCount}`);
     check("Language chips rendered", langCount >= 10, `${langCount}`);
