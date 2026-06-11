@@ -39,6 +39,8 @@ async function main() {
     check("Settings modal opens", true);
 
     const enCount = await page.locator("#speech-mode-english .speech-mode-chip").count();
+    const langFilter = await page.locator("#speech-mode-lang-search").count();
+    check("Language quick-setup filter exists", langFilter === 1);
     const langCount = await page.locator("#speech-mode-languages .speech-mode-chip").count();
     check("English accent chips rendered", enCount >= 4, `${enCount}`);
     check("Language chips rendered", langCount >= 10, `${langCount}`);

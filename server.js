@@ -145,9 +145,13 @@ function pickBestVoices(rawVoices) {
 }
 
 function languageDisplayName(langCode, langNames) {
-  const base = langCode.split("-")[0];
+  const parts = langCode.split("-");
+  const base = parts[0];
+  const region = parts[1] || "";
   try {
-    return langNames.of(base) || langCode;
+    let name = langNames.of(base) || langCode;
+    if (region) name += ` (${region})`;
+    return name;
   } catch {
     return langCode;
   }

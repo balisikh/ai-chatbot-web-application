@@ -879,11 +879,15 @@ textarea#system-prompt {
   color: var(--muted);
   margin-bottom: 6px;
 }
+.speech-mode-search {
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+}
 .speech-mode-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 140px;
+  max-height: 180px;
   overflow-y: auto;
   width: 100%;
   padding: 2px 0;

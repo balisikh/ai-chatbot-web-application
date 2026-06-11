@@ -52,6 +52,7 @@ const showTranslationInput = document.getElementById("show-translation");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
 const speechModeEnglishEl = document.getElementById("speech-mode-english");
 const speechModeLanguagesEl = document.getElementById("speech-mode-languages");
+const speechModeLangSearchInput = document.getElementById("speech-mode-lang-search");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -125,6 +126,7 @@ let googleEnglishAccentGroups = [];
 let googlePunjabiGroup = null;
 let googleVoiceGroups = [];
 let googleTranslateEnabled = false;
+let cachedLanguageModes = [];
 let googleVoiceCount = 0;
 let googleLanguageCount = 0;
 let voiceSearchQuery = "";
@@ -1057,6 +1059,11 @@ if (voiceSearchInput) {
     populateVoices();
   });
 }
+if (speechModeLangSearchInput) {
+  speechModeLangSearchInput.addEventListener("input", () => {
+    renderLanguageModeChips(speechModeLangSearchInput.value);
+  });
+}
 if (translateToEnglishInput) {
   translateToEnglishInput.addEventListener(
     "change",
@@ -1560,9 +1567,23 @@ function findGoogleLanguageGroup(groups, langCode) {
   );
 }
 
+function speechModeLanguageLabel(langCode, fallbackLabel) {
+  const clean = (fallbackLabel || "").replace(/^Google — /, "").trim();
+  if (clean && clean !== langCode && !/^[a-z]{2}(-[A-Za-z0-9]+)?$/i.test(clean)) {
+    return clean;
+  }
+  const parts = (langCode || "").split("-");
+  const baseName = languageLabel(parts[0]);
+  const region = parts[1];
+  return region ? `${baseName} (${region})` : baseName;
+}
+
 function buildNonEnglishSpeechMode(entry, googleGroup) {
-  const label = entry.label || googleGroup?.label || languageLabel(entry.langCode);
-  const cleanLabel = label.replace(/^Google — /, "");
+  const label = speechModeLanguageLabel(
+    entry.langCode,
+    entry.label || googleGroup?.label
+  );
+  const cleanLabel = label;
   const voiceIds = (googleGroup?.voices || []).map((v) => `google:${v.id}`);
   if (entry.preferredVoiceIds?.length) {
     for (const id of entry.preferredVoiceIds) {
@@ -1604,36 +1625,93 @@ function buildSpeechModeCatalog() {
   }
   englishModes.sort((a, b) => a.label.localeCompare(b.label));
 
-  const googleOther = collectGoogleLanguageGroups();
-  const seenLang = new Set();
+  const hasGoogleCatalog =
+    googleVoices.length > 0 || collectGoogleLanguageGroups().length > 0;
 
-  for (const entry of LANGUAGE_QUICK_SETUP) {
-    const key = langBase(entry.langCode);
-    if (seenLang.has(key)) continue;
-    seenLang.add(key);
-    languageModes.push(
-      buildNonEnglishSpeechMode(entry, findGoogleLanguageGroup(googleOther, entry.langCode))
-    );
-  }
+  if (hasGoogleCatalog) {
+    const seenCodes = new Set();
+    const googleOther = collectGoogleLanguageGroups();
 
-  for (const g of googleOther) {
-    const key = langBase(g.langCode);
-    if (seenLang.has(key) || langBase(g.langCode) === "en") continue;
-    seenLang.add(key);
-    languageModes.push(
-      buildNonEnglishSpeechMode({ langCode: g.langCode, label: g.label }, g)
-    );
+    for (const g of googleOther) {
+      if (langBase(g.langCode) === "en" || seenCodes.has(g.langCode)) continue;
+      seenCodes.add(g.langCode);
+      const preset = LANGUAGE_QUICK_SETUP.find(
+        (e) =>
+          e.langCode === g.langCode || langBase(e.langCode) === langBase(g.langCode)
+      );
+      languageModes.push(
+        buildNonEnglishSpeechMode(
+          {
+            langCode: g.langCode,
+            label: g.label,
+            preferredVoiceIds: preset?.preferredVoiceIds,
+          },
+          g
+        )
+      );
+    }
+
+    for (const v of googleVoices) {
+      const lang = v.lang;
+      if (!lang || langBase(lang) === "en" || seenCodes.has(lang)) continue;
+      seenCodes.add(lang);
+      const voices = googleVoices.filter((x) => x.lang === lang);
+      languageModes.push(
+        buildNonEnglishSpeechMode(
+          { langCode: lang, label: "" },
+          { langCode: lang, label: "", voices }
+        )
+      );
+    }
+  } else {
+    for (const entry of LANGUAGE_QUICK_SETUP) {
+      languageModes.push(
+        buildNonEnglishSpeechMode(
+          entry,
+          findGoogleLanguageGroup(collectGoogleLanguageGroups(), entry.langCode)
+        )
+      );
+    }
   }
 
   languageModes.sort((a, b) => a.label.localeCompare(b.label));
   return { englishModes, languageModes };
 }
 
+function languageModeMatchesFilter(mode, query) {
+  if (!query) return true;
+  const haystack = `${mode.label} ${mode.langCode} ${mode.search}`.toLowerCase();
+  return haystack.includes(query);
+}
+
+function renderLanguageModeChips(query = "") {
+  if (!speechModeLanguagesEl) return;
+  speechModeLanguagesEl.innerHTML = "";
+  const q = query.toLowerCase().trim();
+  let shown = 0;
+  for (const mode of cachedLanguageModes) {
+    if (!languageModeMatchesFilter(mode, q)) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip speech-mode-chip";
+    btn.textContent = mode.label;
+    btn.addEventListener("click", () => applySpeechMode(mode));
+    speechModeLanguagesEl.appendChild(btn);
+    shown++;
+  }
+  if (!shown && cachedLanguageModes.length) {
+    const empty = document.createElement("span");
+    empty.className = "voice-hint";
+    empty.textContent = "No languages match your filter.";
+    speechModeLanguagesEl.appendChild(empty);
+  }
+}
+
 function renderSpeechModeChips() {
   if (!speechModeEnglishEl || !speechModeLanguagesEl) return;
   speechModeEnglishEl.innerHTML = "";
-  speechModeLanguagesEl.innerHTML = "";
   const { englishModes, languageModes } = buildSpeechModeCatalog();
+  cachedLanguageModes = languageModes;
   const addChip = (parent, mode) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -1643,7 +1721,8 @@ function renderSpeechModeChips() {
     parent.appendChild(btn);
   };
   for (const mode of englishModes) addChip(speechModeEnglishEl, mode);
-  for (const mode of languageModes) addChip(speechModeLanguagesEl, mode);
+  const filterQuery = speechModeLangSearchInput?.value || "";
+  renderLanguageModeChips(filterQuery);
 }
 
 function pickVoiceForMode(mode) {
