@@ -38,8 +38,14 @@ async function main() {
     await page.waitForSelector("#settings-modal:not(.hidden)");
     check("Settings modal opens", true);
 
-    const punjabiBtn = await page.locator("#apply-punjabi-mode").count();
-    check("Punjabi chat mode button exists", punjabiBtn === 1);
+    const chipCount = await page.locator("#speech-mode-chips .speech-mode-chip").count();
+    check("Speech mode chips rendered", chipCount >= 5, `${chipCount} chips`);
+    const chipText = await page.locator("#speech-mode-chips").innerText();
+    check(
+      "English accent chips present",
+      /English \(US\)/.test(chipText) && /English \(UK\)/.test(chipText)
+    );
+    check("Punjabi chip present", /Punjabi/i.test(chipText));
 
     await page.keyboard.press("Escape");
 

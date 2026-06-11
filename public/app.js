@@ -50,7 +50,7 @@ const translateSourceRow = document.getElementById("translate-source-row");
 const translateSourceLangSelect = document.getElementById("translate-source-lang");
 const showTranslationInput = document.getElementById("show-translation");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
-const applyPunjabiModeBtn = document.getElementById("apply-punjabi-mode");
+const speechModeChipsEl = document.getElementById("speech-mode-chips");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -109,7 +109,7 @@ let settings = Object.assign(
     translateToEnglish: false,
     translateSourceLang: "",
     showTranslation: true,
-    translateForSpeech: true,
+    translateForSpeech: false,
   },
   loadJSON(SETTINGS_KEY, {})
 );
@@ -147,6 +147,20 @@ const ENGLISH_ACCENT_LABELS = {
   "en-PH": "Philippines",
   "en-SG": "Singapore",
   "en-ZA": "South Africa",
+  "en-GB-WLS": "Wales",
+};
+
+const ENGLISH_ACCENT_SHORT = {
+  "en-US": "US",
+  "en-GB": "UK",
+  "en-AU": "AU",
+  "en-CA": "CA",
+  "en-IN": "IN",
+  "en-IE": "IE",
+  "en-NZ": "NZ",
+  "en-PH": "PH",
+  "en-SG": "SG",
+  "en-ZA": "ZA",
   "en-GB-WLS": "Wales",
 };
 
@@ -967,12 +981,13 @@ async function openSettings() {
   readAloudInput.checked = !!settings.readAloud;
   translateToEnglishInput.checked = !!settings.translateToEnglish;
   showTranslationInput.checked = settings.showTranslation !== false;
-  translateForSpeechInput.checked = settings.translateForSpeech !== false;
+  translateForSpeechInput.checked = !!settings.translateForSpeech;
   if (voiceSearchInput) voiceSearchInput.value = voiceSearchQuery;
   window.speechSynthesis?.getVoices();
   await loadGoogleVoices();
   populateTranslateSourceOptions();
   updateTranslationControlsState();
+  renderSpeechModeChips();
   populateVoices();
   speechRateInput.value = String(settings.speechRate || 1);
   rateValueEl.textContent = Number(settings.speechRate || 1).toFixed(1);
@@ -1014,9 +1029,6 @@ if (translateToEnglishInput) {
 if (voiceSelect) {
   voiceSelect.addEventListener("change", syncSettingsWithVoiceSelection);
 }
-if (applyPunjabiModeBtn) {
-  applyPunjabiModeBtn.addEventListener("click", applyPunjabiChatMode);
-}
 saveSettingsBtn.addEventListener("click", () => {
   settings.preset = presetSelect.value;
   settings.systemPrompt = systemPromptInput.value.trim();
@@ -1047,7 +1059,7 @@ resetSettingsBtn.addEventListener("click", () => {
   populateTranslateSourceOptions();
   updateTranslationControlsState();
   showTranslationInput.checked = true;
-  translateForSpeechInput.checked = true;
+  translateForSpeechInput.checked = false;
   voiceSelect.value = "";
   speechRateInput.value = "1";
   rateValueEl.textContent = "1.0";
@@ -1399,61 +1411,6 @@ function syncSettingsWithVoiceSelection() {
   }
 }
 
-const PUNJABI_VOICE_PREFERENCES = [
-  "google:pa-IN-Wavenet-A",
-  "google:pa-IN-Wavenet-B",
-  "google:pa-IN-Standard-A",
-  "google:pa-IN-Standard-B",
-];
-
-function pickPunjabiVoiceInSelect() {
-  if (!voiceSelect) return false;
-  for (const id of PUNJABI_VOICE_PREFERENCES) {
-    const opt = [...voiceSelect.options].find((o) => o.value === id);
-    if (opt && !opt.disabled) {
-      voiceSelect.value = id;
-      return true;
-    }
-  }
-  const punjabi = [...voiceSelect.options].find(
-    (o) => o.value && /punjabi/i.test(o.textContent)
-  );
-  if (punjabi && !punjabi.disabled) {
-    voiceSelect.value = punjabi.value;
-    return true;
-  }
-  return false;
-}
-
-function applyPunjabiChatMode() {
-  if (readAloudInput) readAloudInput.checked = true;
-  if (translateToEnglishInput) translateToEnglishInput.checked = true;
-  if (showTranslationInput) showTranslationInput.checked = true;
-  if (translateForSpeechInput) translateForSpeechInput.checked = true;
-  if (translateSourceLangSelect && !translateSourceLangSelect.disabled) {
-    const pa = [...translateSourceLangSelect.options].find(
-      (o) => o.value === "pa"
-    );
-    translateSourceLangSelect.value = pa ? "pa" : "";
-  }
-  updateTranslateSourceRowVisibility();
-  if (voiceSearchInput) {
-    voiceSearchInput.value = "Punjabi";
-    voiceSearchQuery = "punjabi";
-  }
-  populateVoices();
-  const voiceOk = pickPunjabiVoiceInSelect();
-  if (!googleTranslateEnabled) {
-    showToast("Punjabi mode applied — translation needs server configuration");
-  } else if (!voiceOk) {
-    showToast(
-      "Punjabi mode applied — install Punjabi speech in Windows or check Google key for voices"
-    );
-  } else {
-    showToast("Punjabi chat mode applied — click Save to keep");
-  }
-}
-
 function voiceLangFromName(voiceName) {
   if (voiceName?.startsWith("google:")) {
     const id = voiceName.slice(7);
@@ -1509,6 +1466,206 @@ function languageLabel(langCode) {
     return clientLangNames?.of(base) || langCode;
   } catch {
     return langCode;
+  }
+}
+
+const PUNJABI_VOICE_PREFERENCES = [
+  "google:pa-IN-Wavenet-A",
+  "google:pa-IN-Wavenet-B",
+  "google:pa-IN-Standard-A",
+  "google:pa-IN-Standard-B",
+];
+
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isPunjabiLangCode(langCode) {
+  const l = (langCode || "").toLowerCase();
+  return l === "pa" || l.startsWith("pa-");
+}
+
+function englishAccentChipLabel(langCode) {
+  const short = ENGLISH_ACCENT_SHORT[langCode];
+  if (short) return `English (${short})`;
+  const region = ENGLISH_ACCENT_LABELS[langCode];
+  return region ? `English (${region})` : langCode;
+}
+
+function buildEnglishAccentMatch(langCode) {
+  const region = ENGLISH_ACCENT_LABELS[langCode] || "";
+  const parts = [langCode, region, "english"].filter(Boolean);
+  return new RegExp(parts.map(escapeRegex).join("|"), "i");
+}
+
+function buildLangMatch(langCode, label) {
+  const parts = [langCode, label];
+  const base = langBase(langCode);
+  if (base) parts.push(base);
+  parts.push(languageLabel(langCode));
+  if (isPunjabiLangCode(langCode)) {
+    parts.push("punjabi", "panjabi", "pa-in", "pa");
+  }
+  const unique = [...new Set(parts.filter(Boolean))];
+  return new RegExp(unique.map(escapeRegex).join("|"), "i");
+}
+
+function buildNonEnglishSpeechMode(langCode, label, voices = []) {
+  const cleanLabel = (label || languageLabel(langCode)).replace(/^Google — /, "");
+  return {
+    label: cleanLabel,
+    search: cleanLabel,
+    match: buildLangMatch(langCode, cleanLabel),
+    langCode,
+    isEnglish: false,
+    voiceIds: voices.map((v) => `google:${v.id}`),
+  };
+}
+
+function buildSpeechModeCatalog() {
+  const modes = [];
+  const seenEnglish = new Set();
+  const seenOther = new Set();
+
+  const addEnglish = (langCode) => {
+    if (!langCode || seenEnglish.has(langCode)) return;
+    seenEnglish.add(langCode);
+    const search = ENGLISH_ACCENT_LABELS[langCode] || langCode;
+    modes.push({
+      label: englishAccentChipLabel(langCode),
+      search,
+      match: buildEnglishAccentMatch(langCode),
+      langCode,
+      isEnglish: true,
+      voiceIds: [],
+    });
+  };
+
+  for (const g of googleEnglishAccentGroups) addEnglish(g.langCode);
+  if (!googleEnglishAccentGroups.length) {
+    for (const langCode of Object.keys(ENGLISH_ACCENT_LABELS)) addEnglish(langCode);
+  }
+
+  if (googlePunjabiGroup?.voices?.length) {
+    const lc = googlePunjabiGroup.langCode || "pa-IN";
+    seenOther.add(lc);
+    modes.push(
+      buildNonEnglishSpeechMode(lc, "Punjabi", googlePunjabiGroup.voices)
+    );
+  } else if (!seenOther.has("pa-IN")) {
+    seenOther.add("pa-IN");
+    modes.push(buildNonEnglishSpeechMode("pa-IN", "Punjabi"));
+  }
+
+  for (const g of googleVoiceGroups) {
+    if (isPunjabiLangCode(g.langCode) || seenOther.has(g.langCode)) continue;
+    if (langBase(g.langCode) === "en") continue;
+    seenOther.add(g.langCode);
+    modes.push(buildNonEnglishSpeechMode(g.langCode, g.label, g.voices));
+  }
+
+  modes.sort((a, b) => {
+    if (a.isEnglish !== b.isEnglish) return a.isEnglish ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+  return modes;
+}
+
+function renderSpeechModeChips() {
+  if (!speechModeChipsEl) return;
+  speechModeChipsEl.innerHTML = "";
+  for (const mode of buildSpeechModeCatalog()) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip speech-mode-chip";
+    btn.textContent = mode.label;
+    btn.addEventListener("click", () => applySpeechMode(mode));
+    speechModeChipsEl.appendChild(btn);
+  }
+}
+
+function pickVoiceForMode(mode) {
+  if (!voiceSelect) return false;
+  const options = [...voiceSelect.options];
+
+  if (mode.voiceIds?.length) {
+    for (const id of mode.voiceIds) {
+      const opt = options.find((o) => o.value === id);
+      if (opt && !opt.disabled) {
+        voiceSelect.value = id;
+        return true;
+      }
+    }
+  }
+
+  if (isPunjabiLangCode(mode.langCode)) {
+    for (const id of PUNJABI_VOICE_PREFERENCES) {
+      const opt = options.find((o) => o.value === id);
+      if (opt && !opt.disabled) {
+        voiceSelect.value = id;
+        return true;
+      }
+    }
+  }
+
+  const matched = options.find(
+    (o) => o.value && !o.disabled && mode.match.test(o.textContent)
+  );
+  if (matched) {
+    voiceSelect.value = matched.value;
+    return true;
+  }
+
+  if (mode.isEnglish) {
+    const anyEn = options.find(
+      (o) => o.value && !o.disabled && /english/i.test(o.textContent)
+    );
+    if (anyEn) {
+      voiceSelect.value = anyEn.value;
+      return true;
+    }
+  }
+
+  voiceSelect.value = "";
+  return false;
+}
+
+function applySpeechMode(mode) {
+  if (mode.isEnglish) {
+    if (translateToEnglishInput) translateToEnglishInput.checked = false;
+    if (showTranslationInput) showTranslationInput.checked = false;
+    if (translateForSpeechInput) translateForSpeechInput.checked = false;
+    if (translateSourceLangSelect && !translateSourceLangSelect.disabled) {
+      translateSourceLangSelect.value = "";
+    }
+  } else {
+    if (readAloudInput) readAloudInput.checked = true;
+    if (translateToEnglishInput) translateToEnglishInput.checked = true;
+    if (showTranslationInput) showTranslationInput.checked = true;
+    if (translateForSpeechInput) translateForSpeechInput.checked = true;
+    if (translateSourceLangSelect && !translateSourceLangSelect.disabled) {
+      const base = langBase(mode.langCode);
+      const match = [...translateSourceLangSelect.options].some(
+        (o) => o.value === base
+      );
+      translateSourceLangSelect.value = match ? base : "";
+    }
+  }
+  updateTranslateSourceRowVisibility();
+  if (voiceSearchInput) {
+    voiceSearchInput.value = mode.search;
+    voiceSearchQuery = mode.search.toLowerCase();
+  }
+  populateVoices();
+  const voiceOk = pickVoiceForMode(mode);
+  if (voiceOk) {
+    showToast(`${mode.label} applied — click Save to keep`);
+  } else if (!mode.isEnglish && !googleTranslateEnabled) {
+    showToast(`${mode.label} applied — translation needs server configuration`);
+  } else {
+    showToast(
+      `${mode.label} applied — pick a matching voice below, then Save`
+    );
   }
 }
 

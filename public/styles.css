@@ -880,6 +880,20 @@ textarea#system-prompt {
 .speech-mode-label {
   font-size: 0.82rem;
   color: var(--muted);
+  width: 100%;
+}
+.speech-mode-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  width: 100%;
+  padding: 2px 0;
+}
+.speech-mode-chip {
+  font-size: 0.8rem;
+  padding: 7px 12px;
 }
 .translate-source-row {
   margin: 4px 0 8px;
