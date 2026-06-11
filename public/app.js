@@ -50,7 +50,8 @@ const translateSourceRow = document.getElementById("translate-source-row");
 const translateSourceLangSelect = document.getElementById("translate-source-lang");
 const showTranslationInput = document.getElementById("show-translation");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
-const speechModeChipsEl = document.getElementById("speech-mode-chips");
+const speechModeEnglishEl = document.getElementById("speech-mode-english");
+const speechModeLanguagesEl = document.getElementById("speech-mode-languages");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -163,6 +164,42 @@ const ENGLISH_ACCENT_SHORT = {
   "en-ZA": "ZA",
   "en-GB-WLS": "Wales",
 };
+
+const PUNJABI_VOICE_PREFERENCES = [
+  "google:pa-IN-Wavenet-A",
+  "google:pa-IN-Wavenet-B",
+  "google:pa-IN-Standard-A",
+  "google:pa-IN-Standard-B",
+];
+
+// Shown in quick setup even before Google voices load; merged with API catalog when available.
+const LANGUAGE_QUICK_SETUP = [
+  { langCode: "pa-IN", label: "Punjabi", preferredVoiceIds: PUNJABI_VOICE_PREFERENCES },
+  { langCode: "hi-IN", label: "Hindi" },
+  { langCode: "pl-PL", label: "Polish" },
+  { langCode: "pt-BR", label: "Portuguese (Brazil)" },
+  { langCode: "pt-PT", label: "Portuguese (Portugal)" },
+  { langCode: "fr-FR", label: "French" },
+  { langCode: "de-DE", label: "German" },
+  { langCode: "es-ES", label: "Spanish" },
+  { langCode: "it-IT", label: "Italian" },
+  { langCode: "ja-JP", label: "Japanese" },
+  { langCode: "ko-KR", label: "Korean" },
+  { langCode: "zh-CN", label: "Chinese" },
+  { langCode: "ar-XA", label: "Arabic" },
+  { langCode: "ur-PK", label: "Urdu" },
+  { langCode: "bn-IN", label: "Bengali" },
+  { langCode: "gu-IN", label: "Gujarati" },
+  { langCode: "mr-IN", label: "Marathi" },
+  { langCode: "ta-IN", label: "Tamil" },
+  { langCode: "te-IN", label: "Telugu" },
+  { langCode: "nl-NL", label: "Dutch" },
+  { langCode: "sv-SE", label: "Swedish" },
+  { langCode: "tr-TR", label: "Turkish" },
+  { langCode: "vi-VN", label: "Vietnamese" },
+  { langCode: "th-TH", label: "Thai" },
+  { langCode: "ru-RU", label: "Russian" },
+];
 
 const TRANSLATE_SOURCE_PRESETS = [
   { code: "", label: "Any non-English language → English" },
@@ -1469,13 +1506,6 @@ function languageLabel(langCode) {
   }
 }
 
-const PUNJABI_VOICE_PREFERENCES = [
-  "google:pa-IN-Wavenet-A",
-  "google:pa-IN-Wavenet-B",
-  "google:pa-IN-Standard-A",
-  "google:pa-IN-Standard-B",
-];
-
 function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1510,28 +1540,55 @@ function buildLangMatch(langCode, label) {
   return new RegExp(unique.map(escapeRegex).join("|"), "i");
 }
 
-function buildNonEnglishSpeechMode(langCode, label, voices = []) {
-  const cleanLabel = (label || languageLabel(langCode)).replace(/^Google — /, "");
+function collectGoogleLanguageGroups() {
+  const groups = [];
+  if (googlePunjabiGroup?.voices?.length) {
+    groups.push({
+      langCode: googlePunjabiGroup.langCode || "pa-IN",
+      label: "Punjabi",
+      voices: googlePunjabiGroup.voices,
+    });
+  }
+  for (const g of googleVoiceGroups) groups.push(g);
+  return groups;
+}
+
+function findGoogleLanguageGroup(groups, langCode) {
+  const base = langBase(langCode);
+  return groups.find(
+    (g) => g.langCode === langCode || langBase(g.langCode) === base
+  );
+}
+
+function buildNonEnglishSpeechMode(entry, googleGroup) {
+  const label = entry.label || googleGroup?.label || languageLabel(entry.langCode);
+  const cleanLabel = label.replace(/^Google — /, "");
+  const voiceIds = (googleGroup?.voices || []).map((v) => `google:${v.id}`);
+  if (entry.preferredVoiceIds?.length) {
+    for (const id of entry.preferredVoiceIds) {
+      if (!voiceIds.includes(id)) voiceIds.push(id);
+    }
+  }
   return {
     label: cleanLabel,
     search: cleanLabel,
-    match: buildLangMatch(langCode, cleanLabel),
-    langCode,
+    match: buildLangMatch(entry.langCode, cleanLabel),
+    langCode: entry.langCode,
     isEnglish: false,
-    voiceIds: voices.map((v) => `google:${v.id}`),
+    voiceIds,
   };
 }
 
 function buildSpeechModeCatalog() {
-  const modes = [];
+  const englishModes = [];
+  const languageModes = [];
   const seenEnglish = new Set();
-  const seenOther = new Set();
 
   const addEnglish = (langCode) => {
     if (!langCode || seenEnglish.has(langCode)) return;
     seenEnglish.add(langCode);
     const search = ENGLISH_ACCENT_LABELS[langCode] || langCode;
-    modes.push({
+    englishModes.push({
       label: englishAccentChipLabel(langCode),
       search,
       match: buildEnglishAccentMatch(langCode),
@@ -1545,43 +1602,48 @@ function buildSpeechModeCatalog() {
   if (!googleEnglishAccentGroups.length) {
     for (const langCode of Object.keys(ENGLISH_ACCENT_LABELS)) addEnglish(langCode);
   }
+  englishModes.sort((a, b) => a.label.localeCompare(b.label));
 
-  if (googlePunjabiGroup?.voices?.length) {
-    const lc = googlePunjabiGroup.langCode || "pa-IN";
-    seenOther.add(lc);
-    modes.push(
-      buildNonEnglishSpeechMode(lc, "Punjabi", googlePunjabiGroup.voices)
+  const googleOther = collectGoogleLanguageGroups();
+  const seenLang = new Set();
+
+  for (const entry of LANGUAGE_QUICK_SETUP) {
+    const key = langBase(entry.langCode);
+    if (seenLang.has(key)) continue;
+    seenLang.add(key);
+    languageModes.push(
+      buildNonEnglishSpeechMode(entry, findGoogleLanguageGroup(googleOther, entry.langCode))
     );
-  } else if (!seenOther.has("pa-IN")) {
-    seenOther.add("pa-IN");
-    modes.push(buildNonEnglishSpeechMode("pa-IN", "Punjabi"));
   }
 
-  for (const g of googleVoiceGroups) {
-    if (isPunjabiLangCode(g.langCode) || seenOther.has(g.langCode)) continue;
-    if (langBase(g.langCode) === "en") continue;
-    seenOther.add(g.langCode);
-    modes.push(buildNonEnglishSpeechMode(g.langCode, g.label, g.voices));
+  for (const g of googleOther) {
+    const key = langBase(g.langCode);
+    if (seenLang.has(key) || langBase(g.langCode) === "en") continue;
+    seenLang.add(key);
+    languageModes.push(
+      buildNonEnglishSpeechMode({ langCode: g.langCode, label: g.label }, g)
+    );
   }
 
-  modes.sort((a, b) => {
-    if (a.isEnglish !== b.isEnglish) return a.isEnglish ? -1 : 1;
-    return a.label.localeCompare(b.label);
-  });
-  return modes;
+  languageModes.sort((a, b) => a.label.localeCompare(b.label));
+  return { englishModes, languageModes };
 }
 
 function renderSpeechModeChips() {
-  if (!speechModeChipsEl) return;
-  speechModeChipsEl.innerHTML = "";
-  for (const mode of buildSpeechModeCatalog()) {
+  if (!speechModeEnglishEl || !speechModeLanguagesEl) return;
+  speechModeEnglishEl.innerHTML = "";
+  speechModeLanguagesEl.innerHTML = "";
+  const { englishModes, languageModes } = buildSpeechModeCatalog();
+  const addChip = (parent, mode) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "chip speech-mode-chip";
     btn.textContent = mode.label;
     btn.addEventListener("click", () => applySpeechMode(mode));
-    speechModeChipsEl.appendChild(btn);
-  }
+    parent.appendChild(btn);
+  };
+  for (const mode of englishModes) addChip(speechModeEnglishEl, mode);
+  for (const mode of languageModes) addChip(speechModeLanguagesEl, mode);
 }
 
 function pickVoiceForMode(mode) {
@@ -1590,16 +1652,6 @@ function pickVoiceForMode(mode) {
 
   if (mode.voiceIds?.length) {
     for (const id of mode.voiceIds) {
-      const opt = options.find((o) => o.value === id);
-      if (opt && !opt.disabled) {
-        voiceSelect.value = id;
-        return true;
-      }
-    }
-  }
-
-  if (isPunjabiLangCode(mode.langCode)) {
-    for (const id of PUNJABI_VOICE_PREFERENCES) {
       const opt = options.find((o) => o.value === id);
       if (opt && !opt.disabled) {
         voiceSelect.value = id;

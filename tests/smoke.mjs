@@ -38,14 +38,25 @@ async function main() {
     await page.waitForSelector("#settings-modal:not(.hidden)");
     check("Settings modal opens", true);
 
-    const chipCount = await page.locator("#speech-mode-chips .speech-mode-chip").count();
-    check("Speech mode chips rendered", chipCount >= 5, `${chipCount} chips`);
-    const chipText = await page.locator("#speech-mode-chips").innerText();
+    const enCount = await page.locator("#speech-mode-english .speech-mode-chip").count();
+    const langCount = await page.locator("#speech-mode-languages .speech-mode-chip").count();
+    check("English accent chips rendered", enCount >= 4, `${enCount}`);
+    check("Language chips rendered", langCount >= 10, `${langCount}`);
+    const enText = await page.locator("#speech-mode-english").innerText();
+    const langText = await page.locator("#speech-mode-languages").innerText();
     check(
-      "English accent chips present",
-      /English \(US\)/.test(chipText) && /English \(UK\)/.test(chipText)
+      "English US/UK chips present",
+      /English \(US\)/.test(enText) && /English \(UK\)/.test(enText)
     );
-    check("Punjabi chip present", /Punjabi/i.test(chipText));
+    check(
+      "Requested language chips present",
+      /Punjabi/i.test(langText) &&
+        /Hindi/i.test(langText) &&
+        /Polish/i.test(langText) &&
+        /French/i.test(langText) &&
+        /German/i.test(langText) &&
+        /Portuguese/i.test(langText)
+    );
 
     await page.keyboard.press("Escape");
 

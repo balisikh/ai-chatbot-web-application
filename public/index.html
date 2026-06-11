@@ -128,9 +128,13 @@
           Auto-scroll to newest message
         </label>
 
-        <div class="speech-mode-row">
-          <span class="speech-mode-label">Quick setup (language + country)</span>
-          <div id="speech-mode-chips" class="speech-mode-chips"></div>
+        <div class="speech-mode-block">
+          <span class="speech-mode-label">Quick setup — English accents</span>
+          <div id="speech-mode-english" class="speech-mode-chips"></div>
+        </div>
+        <div class="speech-mode-block">
+          <span class="speech-mode-label">Quick setup — other languages</span>
+          <div id="speech-mode-languages" class="speech-mode-chips"></div>
         </div>
 
         <label class="toggle-row">
@@ -158,7 +162,7 @@
           Translate English replies to voice language when speaking
         </label>
         <div id="tts-controls">
-          <label for="voice-select">Voice (English accents + all languages)</label>
+          <label for="voice-select">Voice (fine-tune after quick setup)</label>
           <input
             id="voice-search"
             class="search-input"

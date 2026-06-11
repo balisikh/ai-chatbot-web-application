@@ -870,17 +870,14 @@ textarea#system-prompt {
 .voice-hint.hidden {
   display: none;
 }
-.speech-mode-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0 10px;
+.speech-mode-block {
+  margin: 8px 0 10px;
 }
 .speech-mode-label {
+  display: block;
   font-size: 0.82rem;
   color: var(--muted);
-  width: 100%;
+  margin-bottom: 6px;
 }
 .speech-mode-chips {
   display: flex;
