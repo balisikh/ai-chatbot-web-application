@@ -94,6 +94,25 @@ async function main() {
       );
     }
 
+    const attachRes = await page.request.post(`${BASE}/api/attach/extract`, {
+      multipart: {
+        file: {
+          name: "smoke.txt",
+          mimeType: "text/plain",
+          buffer: Buffer.from("smoke attachment text"),
+        },
+      },
+    });
+    check("POST /api/attach/extract", attachRes.ok(), String(attachRes.status()));
+    if (attachRes.ok()) {
+      const attach = await attachRes.json();
+      check(
+        "Attachment extract returns text",
+        attach.text?.includes("smoke attachment"),
+        attach.text || ""
+      );
+    }
+
     const translateRes = await page.request.post(`${BASE}/api/translate`, {
       data: { text: "hello", target: "en" },
     });

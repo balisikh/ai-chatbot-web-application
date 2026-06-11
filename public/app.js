@@ -1165,38 +1165,36 @@ modelPicker.addEventListener("change", () => {
 
 // --- File upload ----------------------------------------------------------
 const ATTACH_MAX = 30000;
-let pdfjsReady = null;
-function loadPdfJs() {
-  if (window.pdfjsLib) return Promise.resolve();
-  if (pdfjsReady) return pdfjsReady;
-  pdfjsReady = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "vendor/pdfjs/pdf.min.js";
-    s.onload = () => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "vendor/pdfjs/pdf.worker.min.js";
-      resolve();
-    };
-    s.onerror = () => reject(new Error("Failed to load PDF reader"));
-    document.head.appendChild(s);
-  });
-  return pdfjsReady;
-}
-async function extractPdfText(file) {
-  await loadPdfJs();
-  const buf = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-  const maxPages = Math.min(pdf.numPages, 50);
-  let text = "";
-  for (let p = 1; p <= maxPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    text += content.items.map((it) => it.str).join(" ") + "\n\n";
-    if (text.length > ATTACH_MAX) break;
+const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
+
+async function extractAttachmentText(file) {
+  const form = new FormData();
+  form.append("file", file);
+  let res;
+  try {
+    res = await fetch("/api/attach/extract", { method: "POST", body: form });
+  } catch {
+    throw new Error("Could not reach the server — is it still running?");
   }
-  if (pdf.numPages > maxPages) text += `\n[Only first ${maxPages} pages read]`;
-  return text;
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    /* non-JSON body (e.g. old server HTML 404 page) */
+  }
+  if (!res.ok) {
+    if (data.error) throw new Error(data.error);
+    if (res.status === 404) {
+      throw new Error(
+        "File reading is not available on this server — stop it and run npm start again"
+      );
+    }
+    throw new Error(`Could not read file (server error ${res.status})`);
+  }
+  return data.text || "";
 }
+
 function setAttachment(name, content) {
   if (content.length > ATTACH_MAX)
     content = content.slice(0, ATTACH_MAX) + "\n...[truncated]";
@@ -1204,33 +1202,31 @@ function setAttachment(name, content) {
   attachmentNameEl.textContent = "\u{1F4CE} " + name;
   attachmentEl.classList.remove("hidden");
 }
+
 attachBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const f = fileInput.files[0];
   fileInput.value = "";
   if (!f) return;
-  const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
-  if (isPdf) {
-    attachmentNameEl.textContent = "\u{1F4CE} Reading " + f.name + "...";
-    attachmentEl.classList.remove("hidden");
-    try {
-      const text = await extractPdfText(f);
-      if (!text.trim()) {
-        showToast("No readable text found in that PDF");
-        clearAttachment();
-        return;
-      }
-      setAttachment(f.name, text);
-      showToast("PDF loaded");
-    } catch (err) {
-      showToast("Could not read PDF: " + err.message);
-      clearAttachment();
-    }
+  if (f.size > ATTACH_MAX_BYTES) {
+    showToast("File too large (max 15 MB)");
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => setAttachment(f.name, String(reader.result || ""));
-  reader.readAsText(f);
+  attachmentNameEl.textContent = "\u{1F4CE} Reading " + f.name + "...";
+  attachmentEl.classList.remove("hidden");
+  try {
+    const text = await extractAttachmentText(f);
+    if (!text.trim()) {
+      showToast("No readable text found in that file");
+      clearAttachment();
+      return;
+    }
+    setAttachment(f.name, text);
+    showToast("File loaded");
+  } catch (err) {
+    showToast(err.message || "Could not read file");
+    clearAttachment();
+  }
 });
 function clearAttachment() {
   pendingAttachment = null;

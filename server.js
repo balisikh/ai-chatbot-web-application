@@ -1,8 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
+import multer from "multer";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import OpenAI from "openai";
+import { PDFParse } from "pdf-parse";
+import mammoth from "mammoth";
+import * as XLSX from "xlsx";
 
 dotenv.config();
 
@@ -14,6 +18,122 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(join(__dirname, "public")));
 app.use(express.json());
+
+const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
+const ATTACH_MAX_CHARS = 30000;
+const ATTACH_MAX_PDF_PAGES = 50;
+const attachUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: ATTACH_MAX_BYTES },
+});
+
+function attachmentKindFromFile(file) {
+  const name = file.originalname || "";
+  const type = (file.mimetype || "").toLowerCase();
+  if (type === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+  if (
+    type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    /\.docx$/i.test(name)
+  ) {
+    return "docx";
+  }
+  if (/\.doc$/i.test(name)) return "doc";
+  if (
+    type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    /\.(xlsx|xls)$/i.test(name)
+  ) {
+    return "excel";
+  }
+  if (/\.(pptx|ppt)$/i.test(name)) return "ppt";
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(name) || type.startsWith("image/")) {
+    return "image";
+  }
+  if (/\.(mp4|webm|mov|avi|mkv|m4v)$/i.test(name) || type.startsWith("video/")) {
+    return "video";
+  }
+  if (
+    /\.(txt|md|csv|json|js|ts|py|html|css|log|xml|yml|yaml)$/i.test(name) ||
+    type.startsWith("text/")
+  ) {
+    return "text";
+  }
+  return "unknown";
+}
+
+function truncateAttachmentText(text) {
+  if (text.length > ATTACH_MAX_CHARS) {
+    return text.slice(0, ATTACH_MAX_CHARS) + "\n...[truncated]";
+  }
+  return text;
+}
+
+async function extractPdfBuffer(buf) {
+  const parser = new PDFParse({ data: buf });
+  try {
+    const result = await parser.getText({ first: ATTACH_MAX_PDF_PAGES });
+    let text = result.text || "";
+    if (result.total > ATTACH_MAX_PDF_PAGES) {
+      text += `\n[Only first ${ATTACH_MAX_PDF_PAGES} pages read]`;
+    }
+    return text;
+  } finally {
+    await parser.destroy();
+  }
+}
+
+async function extractDocxBuffer(buf) {
+  const result = await mammoth.extractRawText({ buffer: buf });
+  return result.value || "";
+}
+
+function extractExcelBuffer(buf) {
+  const workbook = XLSX.read(buf, { type: "buffer" });
+  let text = "";
+  for (const name of workbook.SheetNames) {
+    text += `\n=== Sheet: ${name} ===\n`;
+    text += XLSX.utils.sheet_to_csv(workbook.Sheets[name]) + "\n";
+    if (text.length > ATTACH_MAX_CHARS) break;
+  }
+  return text;
+}
+
+async function extractAttachmentBuffer(file) {
+  const kind = attachmentKindFromFile(file);
+  const buf = file.buffer;
+  switch (kind) {
+    case "pdf":
+      return await extractPdfBuffer(buf);
+    case "docx":
+      return await extractDocxBuffer(buf);
+    case "doc":
+      throw new Error(
+        "Old Word .doc is not supported — save as .docx or export to PDF"
+      );
+    case "excel":
+      return extractExcelBuffer(buf);
+    case "ppt":
+      throw new Error(
+        "PowerPoint is not supported yet — export slides to PDF or paste the text"
+      );
+    case "image":
+      throw new Error(
+        "Images are not read as text — describe the image in your message or attach a PDF"
+      );
+    case "video":
+      throw new Error(
+        "Video files cannot be read as text — describe what you need in your message"
+      );
+    case "text":
+      return buf.toString("utf8");
+    default:
+      const asText = buf.toString("utf8");
+      if (asText && !asText.includes("\0")) return asText;
+      throw new Error(
+        "Unsupported file — use PDF, Word (.docx), Excel (.xlsx), or plain text"
+      );
+  }
+}
 
 // A short instruction that shapes the chatbot's personality and behavior.
 const SYSTEM_PROMPT =
@@ -587,6 +707,38 @@ app.post("/api/speech/synthesize", async (req, res) => {
   }
 });
 
+app.post("/api/attach/extract", (req, res) => {
+  attachUpload.single("file")(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      const msg =
+        uploadErr.code === "LIMIT_FILE_SIZE"
+          ? "File too large (max 15 MB)"
+          : uploadErr.message || "Upload failed";
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded." });
+    }
+    try {
+      const text = await extractAttachmentBuffer(req.file);
+      if (!text.trim()) {
+        return res
+          .status(400)
+          .json({ error: "No readable text found in that file" });
+      }
+      return res.json({
+        name: req.file.originalname,
+        text: truncateAttachmentText(text),
+      });
+    } catch (err) {
+      console.error("Attachment extract error:", err.message);
+      return res
+        .status(400)
+        .json({ error: err.message || "Could not read file" });
+    }
+  });
+});
+
 app.post("/api/chat", async (req, res) => {
   const { messages, model, systemPrompt, temperature, maxTokens } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -662,6 +814,7 @@ app.listen(PORT, async () => {
       : "offline demo mode (no AI model connected)";
   console.log(`AI chatbot running at http://localhost:${PORT}`);
   console.log(`Active AI provider: ${label}`);
+  console.log("File attachments: POST /api/attach/extract (PDF, Word, Excel, text)");
   if (GOOGLE_TTS_KEY) {
     try {
       const catalog = await fetchGoogleVoiceCatalog();

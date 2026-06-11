@@ -66,10 +66,21 @@
         </div>
 
         <form id="chat-form" class="chat-form">
-          <button id="attach" type="button" class="mic-btn" title="Attach a text file" aria-label="Attach file">
+          <button
+            id="attach"
+            type="button"
+            class="mic-btn"
+            title="Attach PDF, Word, Excel, or text file"
+            aria-label="Attach file"
+          >
             &#128206;
           </button>
-          <input id="file-input" type="file" class="hidden" accept=".pdf,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml" />
+          <input
+            id="file-input"
+            type="file"
+            class="hidden"
+            accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          />
           <button id="mic" type="button" class="mic-btn" title="Speak your message" aria-label="Voice input">
             &#127908;
           </button>
