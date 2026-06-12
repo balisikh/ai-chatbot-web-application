@@ -945,6 +945,7 @@ textarea#system-prompt {
 .voice-select {
   max-height: 220px;
 }
+.detected-lang-badge,
 .translation-badge {
   font-size: 0.82rem;
   color: var(--muted);
@@ -952,6 +953,25 @@ textarea#system-prompt {
   padding-top: 8px;
   border-top: 1px solid var(--border);
   line-height: 1.45;
+}
+.speech-mode-how-to {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.speech-mode-how-to summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.speech-mode-how-to ol {
+  margin: 6px 0 8px;
+  padding-left: 1.2rem;
+}
+.speech-mode-how-to p {
+  margin: 0;
 }
 .toggle-row {
   display: flex;

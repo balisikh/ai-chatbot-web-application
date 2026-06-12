@@ -219,12 +219,11 @@ These interactive/UX features have been built on top of the core app.
   or message content.
 - **Edit & resend** — an Edit button on any of your messages reloads it into the
   input and truncates the chat from that point, so you can re-ask.
-- **File/document upload** — attach a text-based file (`.txt`, `.md`, `.csv`,
-  `.json`, code, etc.) **or a PDF**; its contents are sent as context so you can
-  ask questions about it (large files are truncated to keep within the context).
-  PDF text is extracted in the browser with a locally bundled copy of Mozilla's
-  pdf.js (`public/vendor/pdfjs/`, loaded on demand so it stays offline), reading
-  up to the first 50 pages.
+- **File/document upload** — attach PDF, Word (`.docx`), Excel (`.xlsx`/`.xls`),
+  or plain text/code (`.txt`, `.md`, `.csv`, `.json`, etc.). Text is extracted
+  on the server via `POST /api/attach/extract` (`pdf-parse`, `mammoth`, `xlsx`)
+  and sent as context (large files are truncated). Legacy `.doc`, PowerPoint,
+  and images are not supported yet.
 - **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
   Solar, Rose) selectable in Settings or by cycling with the header button, plus
   a custom accent-color picker. Choices persist between visits.

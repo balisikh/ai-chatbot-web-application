@@ -13,7 +13,8 @@ Secrets stay on the server — never in the browser.
 - **Google + browser voices** — English accents and many languages (incl. Punjabi)
 - **Translation** — your language → English for the AI; English → voice language for speech
 - **Punjabi chat mode** — one-click settings preset in the modal
-- File attachments (text + PDF), regenerate, edit & resend, usage estimates
+- File attachments (PDF, Word `.docx`, Excel, text/code — extracted on the server), regenerate, edit & resend, usage estimates
+- **26 popular languages** in Settings quick-setup (incl. Spanish Mexico), with in-app “How to use languages” help
 - Responsive layout (phone drawer, tablet, desktop)
 
 ## How it works
@@ -34,9 +35,10 @@ ai-chatbot-web-application/
 │   ├── styles.css
 │   └── app.js           # Frontend (monolithic)
 ├── server.js            # API + AI providers + Google TTS/translate
-├── tests/smoke.mjs      # Automated smoke tests
+├── tests/smoke.mjs      # Automated smoke tests (also run in GitHub Actions on push)
 ├── docs/
-│   └── GOOGLE_CLOUD_SETUP.md
+│   ├── GOOGLE_CLOUD_SETUP.md
+│   └── DEPLOY.md
 ├── .env.example
 └── package.json
 ```
@@ -78,8 +80,11 @@ Open the URL printed in the terminal (default `http://localhost:3000`).
 
 ```bash
 npm run dev    # auto-restart on server.js changes
-npm test       # smoke tests (server should be running, or start it first)
+npm test              # smoke tests (server should be running, or start it first)
+npm run verify:google # check Google TTS + Translation key (optional)
 ```
+
+Push to `main` runs `npm test` automatically via GitHub Actions (see `.github/workflows/ci.yml`).
 
 ## Voice & translation quick start
 
@@ -112,6 +117,9 @@ Requires `GOOGLE_CLOUD_TTS_API_KEY`. Use the voice search box to filter by langu
 | `GET /api/speech/voices` | Google + catalog metadata |
 | `POST /api/translate` | Translate text (needs Google key) |
 | `POST /api/speech/synthesize` | Google TTS audio (needs Google key) |
+| `POST /api/attach/extract` | Extract text from PDF, `.docx`, Excel, plain text/code |
+
+Deploy checklist: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Notes
 

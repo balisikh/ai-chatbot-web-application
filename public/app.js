@@ -227,7 +227,8 @@ const LANGUAGE_QUICK_SETUP = [
   { langCode: "pl-PL", label: "Polish", region: "europe" },
   { langCode: "ru-RU", label: "Russian", region: "europe" },
   { langCode: "pt-PT", label: "Portuguese (Portugal)", region: "europe" },
-  { langCode: "es-ES", label: "Spanish", region: "americas" },
+  { langCode: "es-ES", label: "Spanish (Spain)", region: "americas" },
+  { langCode: "es-MX", label: "Spanish (Mexico)", region: "americas" },
   { langCode: "pt-BR", label: "Portuguese (Brazil)", region: "americas" },
 ];
 
@@ -559,6 +560,13 @@ function addMessage(role, text, opts = {}) {
     const span = document.createElement("span");
     span.textContent = text;
     bubble.appendChild(span);
+    if (opts.detectedLang && langBase(opts.detectedLang) !== "en") {
+      const det = document.createElement("div");
+      det.className = "detected-lang-badge";
+      det.textContent =
+        "Detected: " + formatDetectedLanguageLabel(opts.detectedLang);
+      bubble.appendChild(det);
+    }
     if (opts.translation) {
       const tr = document.createElement("div");
       tr.className = "translation-badge";
@@ -679,6 +687,8 @@ function renderConversation() {
         file: msg.file,
         translation:
           settings.showTranslation && msg.translation ? msg.translation : null,
+        detectedLang:
+          settings.showTranslation && msg.detectedLang ? msg.detectedLang : null,
         tokens: estimateTokens(msg.content),
         onEdit: () => editMessage(i),
       });
@@ -1471,9 +1481,20 @@ function populateTranslateSourceOptions() {
   }
 }
 
+function formatDetectedLanguageLabel(code) {
+  if (!code) return "";
+  const base = langBase(code);
+  const label = languageLabel(base);
+  const region = code.includes("-") ? code.split("-")[1] : "";
+  if (region && label && label !== code) {
+    return `${label} (${region})`;
+  }
+  return label || code;
+}
+
 async function translateUserMessageToEnglish(text) {
   if (!text || !settings.translateToEnglish || !googleTranslateEnabled) {
-    return null;
+    return { translation: null, detected: null };
   }
   const sourceFilter = settings.translateSourceLang || "";
   try {
@@ -1482,18 +1503,23 @@ async function translateUserMessageToEnglish(text) {
       "en",
       sourceFilter || undefined
     );
-    if (!data.translatedText || data.translatedText === text) return null;
-    const detected = langBase(data.detectedSourceLanguage);
+    const detected = data.detectedSourceLanguage || null;
+    const detectedBase = langBase(detected);
+    if (!data.translatedText || data.translatedText === text) {
+      return { translation: null, detected };
+    }
     if (sourceFilter) {
       const want = langBase(sourceFilter);
-      if (detected && detected !== want) return null;
-    } else if (detected === "en") {
-      return null;
+      if (detectedBase && detectedBase !== want) {
+        return { translation: null, detected };
+      }
+    } else if (detectedBase === "en") {
+      return { translation: null, detected };
     }
-    return data.translatedText;
+    return { translation: data.translatedText, detected };
   } catch (err) {
     showToast(err.message || "Translation failed — sending original text");
-    return null;
+    return { translation: null, detected: null };
   }
 }
 
@@ -2550,10 +2576,13 @@ form.addEventListener("submit", async (e) => {
   let content = text;
   let display = text;
   let translation = null;
+  let detectedLang = null;
   let file = null;
 
   if (text) {
-    translation = await translateUserMessageToEnglish(text);
+    const tr = await translateUserMessageToEnglish(text);
+    translation = tr.translation;
+    detectedLang = tr.detected;
     if (translation) content = translation;
   }
 
@@ -2576,6 +2605,8 @@ form.addEventListener("submit", async (e) => {
       settings.showTranslation && translation && translation !== display
         ? translation
         : null,
+    detectedLang:
+      settings.showTranslation && detectedLang ? detectedLang : null,
   });
   convo.messages.push({
     role: "user",
@@ -2583,6 +2614,7 @@ form.addEventListener("submit", async (e) => {
     display,
     translation:
       translation && translation !== display ? translation : undefined,
+    detectedLang: detectedLang || undefined,
     file,
     t: new Date().toISOString(),
   });

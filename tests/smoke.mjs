@@ -64,8 +64,12 @@ async function main() {
         /Polish/i.test(langText) &&
         /French/i.test(langText) &&
         /German/i.test(langText) &&
-        /Portuguese/i.test(langText)
+        /Portuguese/i.test(langText) &&
+        /Spanish \(Mexico\)/i.test(langText)
     );
+
+    const howTo = await page.locator("#speech-mode-how-to").count();
+    check("How to use languages help exists", howTo === 1);
 
     await page.keyboard.press("Escape");
 
