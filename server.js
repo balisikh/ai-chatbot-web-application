@@ -211,14 +211,33 @@ function isPunjabiLang(lang) {
   return (lang || "").toLowerCase().startsWith("pa");
 }
 
+function genderWord(gender) {
+  if (gender === "male") return "Male";
+  if (gender === "female") return "Female";
+  return "Voice";
+}
+
 function punjabiFriendlyLabel(voice) {
-  const g =
-    voice.gender === "male"
-      ? "Male"
-      : voice.gender === "female"
-      ? "Female"
-      : "Voice";
-  return `Google Punjabi — ${g} (${voice.tier})`;
+  return `Google Punjabi — ${genderWord(voice.gender)} (${voice.tier})`;
+}
+
+function friendlyGoogleVoiceLabel(langCode, voice, langNames) {
+  if (isPunjabiLang(voice.lang || langCode)) {
+    return punjabiFriendlyLabel(voice);
+  }
+  const name = languageDisplayName(langCode, langNames)
+    .replace(/\s*\([A-Z]{2,3}\)\s*$/, "")
+    .trim();
+  return `Google ${name} — ${genderWord(voice.gender)} (${voice.tier})`;
+}
+
+function voiceGenderIds(voices) {
+  const female = voices.find((v) => v.gender === "female");
+  const male = voices.find((v) => v.gender === "male");
+  return {
+    femaleVoiceId: female?.id || null,
+    maleVoiceId: male?.id || null,
+  };
 }
 
 function voiceTier(name) {
@@ -309,7 +328,14 @@ async function fetchGoogleVoiceCatalog() {
     });
   }
 
+  for (const v of raw) {
+    v.label = friendlyGoogleVoiceLabel(v.lang, v, langNames);
+  }
+
   const googleVoices = pickBestVoices(raw);
+  for (const v of googleVoices) {
+    v.label = friendlyGoogleVoiceLabel(v.lang, v, langNames);
+  }
   const englishAccentGroups = [];
   const voiceGroups = [];
   const enByAccent = new Map();
@@ -341,6 +367,7 @@ async function fetchGoogleVoiceCatalog() {
       langCode,
       label: languageDisplayName(langCode, langNames),
       voices,
+      ...voiceGenderIds(voices),
     });
   }
   voiceGroups.sort((a, b) => a.label.localeCompare(b.label));
@@ -396,6 +423,7 @@ function applyPunjabiVoices(catalog) {
     langCode: "pa-IN",
     label: "Punjabi",
     voices: punjabiVoices,
+    ...voiceGenderIds(punjabiVoices),
   };
   catalog.punjabiVoices = punjabiVoices;
   catalog.languageCount =

@@ -57,6 +57,7 @@ const speechModeEnglishHint = document.getElementById("speech-mode-english-hint"
 const speechModeLanguagesTitle = document.getElementById("speech-mode-languages-title");
 const speechModeLanguagesHint = document.getElementById("speech-mode-languages-hint");
 const speechModeGoogleStatus = document.getElementById("speech-mode-google-status");
+const googleSpeechPipelineHint = document.getElementById("google-speech-pipeline-hint");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
@@ -1076,7 +1077,11 @@ if (translateToEnglishInput) {
   );
 }
 if (voiceSelect) {
-  voiceSelect.addEventListener("change", syncSettingsWithVoiceSelection);
+  voiceSelect.addEventListener("change", () => {
+    syncSettingsWithVoiceSelection();
+    settings.voiceName = voiceSelect.value;
+    updateRecognitionLang();
+  });
 }
 saveSettingsBtn.addEventListener("click", () => {
   settings.preset = presetSelect.value;
@@ -1092,6 +1097,7 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.voiceName = voiceSelect.value;
   settings.speechRate = parseFloat(speechRateInput.value) || 1;
   saveSettings();
+  updateRecognitionLang();
   closeSettings();
 });
 resetSettingsBtn.addEventListener("click", () => {
@@ -1263,6 +1269,7 @@ if (SpeechRecognition) {
       recognition.stop();
       return;
     }
+    updateRecognitionLang();
     try {
       recognition.start();
       listening = true;
@@ -1315,6 +1322,10 @@ async function loadGoogleVoices() {
       data.languageCount ||
       googleEnglishAccentGroups.length + googleVoiceGroups.length;
     if (data.error) showToast("Google voices: " + data.error);
+    populateTranslateSourceOptions();
+    updateRecognitionLang();
+    renderSpeechModeChips();
+    updateGoogleSpeechPipelineHint();
   } catch {
     googleCatalogOnline = false;
     googleVoices = [];
@@ -1477,6 +1488,28 @@ function getSelectedVoiceLang() {
   return voiceLangFromName(settings.voiceName);
 }
 
+/** Speech recognition locale — follows voice or translate-source language. */
+function recognitionLangForSettings() {
+  const voiceLang = getSelectedVoiceLang();
+  if (voiceLang) return voiceLang;
+  const source = settings.translateSourceLang || "";
+  if (source) {
+    const base = langBase(source);
+    const fromVoice = googleVoices.find((v) => langBase(v.lang) === base);
+    if (fromVoice?.lang) return fromVoice.lang;
+    const fromGroup = googleVoiceGroups.find((g) => langBase(g.langCode) === base);
+    if (fromGroup?.langCode) return fromGroup.langCode;
+    if (source.includes("-")) return source;
+    return base;
+  }
+  return "en-US";
+}
+
+function updateRecognitionLang() {
+  if (!recognition) return;
+  recognition.lang = recognitionLangForSettings();
+}
+
 function speechTranslateTarget(lang) {
   if (!lang) return null;
   const base = lang.split("-")[0].toLowerCase();
@@ -1581,26 +1614,74 @@ function speechModeLanguageLabel(langCode, fallbackLabel) {
   return region ? `${baseName} (${region})` : baseName;
 }
 
-function buildNonEnglishSpeechMode(entry, googleGroup) {
+function googleVoiceId(v) {
+  return v?.id ? `google:${v.id}` : "";
+}
+
+function pickGoogleVoiceIdForGender(group, gender) {
+  if (!group) return "";
+  if (gender === "female" && group.femaleVoiceId) {
+    return `google:${group.femaleVoiceId}`;
+  }
+  if (gender === "male" && group.maleVoiceId) {
+    return `google:${group.maleVoiceId}`;
+  }
+  const voices = group.voices || [];
+  const match = voices.find((v) => v.gender === gender);
+  if (match) return googleVoiceId(match);
+  return googleVoiceId(voices[0]);
+}
+
+function buildNonEnglishSpeechMode(entry, googleGroup, opts = {}) {
   const label = speechModeLanguageLabel(
     entry.langCode,
     entry.label || googleGroup?.label
   );
   const cleanLabel = label;
-  const voiceIds = (googleGroup?.voices || []).map((v) => `google:${v.id}`);
+  const genderSuffix = opts.gender === "female" ? " — female" : opts.gender === "male" ? " — male" : "";
+  const displayLabel = genderSuffix ? `${cleanLabel}${genderSuffix}` : cleanLabel;
+  let voiceIds = [];
+  if (opts.gender && googleGroup) {
+    const id = pickGoogleVoiceIdForGender(googleGroup, opts.gender);
+    if (id) voiceIds.push(id);
+  }
+  if (!voiceIds.length) {
+    voiceIds = (googleGroup?.voices || []).map((v) => googleVoiceId(v)).filter(Boolean);
+  }
   if (entry.preferredVoiceIds?.length) {
     for (const id of entry.preferredVoiceIds) {
       if (!voiceIds.includes(id)) voiceIds.push(id);
     }
   }
   return {
-    label: cleanLabel,
-    search: cleanLabel,
+    label: displayLabel,
+    search: `${cleanLabel} ${opts.gender || ""}`.trim(),
     match: buildLangMatch(entry.langCode, cleanLabel),
     langCode: entry.langCode,
     isEnglish: false,
     voiceIds,
+    gender: opts.gender || "",
   };
+}
+
+function expandLanguageModesFromGroup(g, preset) {
+  const entry = {
+    langCode: g.langCode,
+    label: g.label,
+    preferredVoiceIds: preset?.preferredVoiceIds,
+  };
+  if (!googleCatalogOnline) {
+    return [buildNonEnglishSpeechMode(entry, g)];
+  }
+  const femaleId = g.femaleVoiceId || g.voices?.find((v) => v.gender === "female")?.id;
+  const maleId = g.maleVoiceId || g.voices?.find((v) => v.gender === "male")?.id;
+  if (femaleId && maleId) {
+    return [
+      buildNonEnglishSpeechMode(entry, g, { gender: "female" }),
+      buildNonEnglishSpeechMode(entry, g, { gender: "male" }),
+    ];
+  }
+  return [buildNonEnglishSpeechMode(entry, g)];
 }
 
 function buildSpeechModeCatalog() {
@@ -1642,16 +1723,9 @@ function buildSpeechModeCatalog() {
         (e) =>
           e.langCode === g.langCode || langBase(e.langCode) === langBase(g.langCode)
       );
-      languageModes.push(
-        buildNonEnglishSpeechMode(
-          {
-            langCode: g.langCode,
-            label: g.label,
-            preferredVoiceIds: preset?.preferredVoiceIds,
-          },
-          g
-        )
-      );
+      for (const mode of expandLanguageModesFromGroup(g, preset)) {
+        languageModes.push(mode);
+      }
     }
 
     for (const v of googleVoices) {
@@ -1659,12 +1733,10 @@ function buildSpeechModeCatalog() {
       if (!lang || langBase(lang) === "en" || seenCodes.has(lang)) continue;
       seenCodes.add(lang);
       const voices = googleVoices.filter((x) => x.lang === lang);
-      languageModes.push(
-        buildNonEnglishSpeechMode(
-          { langCode: lang, label: "" },
-          { langCode: lang, label: "", voices }
-        )
-      );
+      const group = { langCode: lang, label: "", voices };
+      for (const mode of expandLanguageModesFromGroup(group, null)) {
+        languageModes.push(mode);
+      }
     }
   } else {
     for (const entry of LANGUAGE_QUICK_SETUP) {
@@ -1687,7 +1759,21 @@ function languageModeMatchesFilter(mode, query) {
   return haystack.includes(query);
 }
 
+function updateGoogleSpeechPipelineHint() {
+  if (!googleSpeechPipelineHint) return;
+  if (googleTranslateEnabled && googleCatalogOnline) {
+    googleSpeechPipelineHint.classList.remove("hidden");
+    googleSpeechPipelineHint.textContent =
+      "Google active: speak or type your language → translated to English for the AI → " +
+      "English replies can be translated back and read with the female/male voice you pick.";
+  } else {
+    googleSpeechPipelineHint.classList.add("hidden");
+    googleSpeechPipelineHint.textContent = "";
+  }
+}
+
 function updateSpeechModeLabels() {
+  updateGoogleSpeechPipelineHint();
   if (speechModeEnglishHint) {
     speechModeEnglishHint.textContent =
       "English only — turns translation off and picks an English accent voice.";
@@ -1700,8 +1786,8 @@ function updateSpeechModeLabels() {
   }
   if (speechModeLanguagesHint) {
     speechModeLanguagesHint.textContent = googleCatalogOnline
-      ? "Click a language: you type in that language, the AI gets English, and read-aloud can speak that language."
-      : "Limited list. Add GOOGLE_CLOUD_TTS_API_KEY to .env (enable Text-to-Speech + Translation), then restart the server.";
+      ? "Each language has female and male Google voices. Click one, then Save: you speak that language → English for the AI → replies read aloud in that voice."
+      : "Limited preview. Add GOOGLE_CLOUD_TTS_API_KEY to .env (Text-to-Speech + Translation APIs), restart the server, then refresh for all languages with male/female voices.";
   }
   if (speechModeGoogleStatus) {
     speechModeGoogleStatus.classList.remove("hidden", "online", "offline");
@@ -1820,6 +1906,8 @@ function applySpeechMode(mode) {
   }
   populateVoices();
   const voiceOk = pickVoiceForMode(mode);
+  if (voiceSelect?.value) settings.voiceName = voiceSelect.value;
+  updateRecognitionLang();
   if (mode.isEnglish) {
     showToast(
       voiceOk
@@ -1845,7 +1933,7 @@ function applySpeechMode(mode) {
 
 function voiceSearchTerms(q) {
   const terms = [q];
-  const lower = q.toLowerCase();
+  const lower = q.toLowerCase().trim();
   if (
     lower.includes("punjabi") ||
     lower.includes("panjabi") ||
@@ -1854,7 +1942,65 @@ function voiceSearchTerms(q) {
   ) {
     terms.push("punjabi", "panjabi", "pa-in", "pa");
   }
-  return terms;
+  for (const entry of LANGUAGE_QUICK_SETUP) {
+    const label = entry.label.toLowerCase();
+    const code = entry.langCode.toLowerCase();
+    const base = langBase(entry.langCode);
+    if (
+      lower.includes(label) ||
+      lower === base ||
+      lower === code ||
+      lower.startsWith(base + "-")
+    ) {
+      terms.push(entry.label, entry.langCode, base, languageLabel(base));
+    }
+  }
+  for (const [code, region] of Object.entries(ENGLISH_ACCENT_LABELS)) {
+    if (
+      lower.includes(region.toLowerCase()) ||
+      lower.includes(code.toLowerCase()) ||
+      lower === "english"
+    ) {
+      terms.push(region, code, "english", "en");
+    }
+  }
+  return [...new Set(terms.filter(Boolean))];
+}
+
+function voiceSearchNoMatchHint(query) {
+  const q = query.trim();
+  const langEntry = LANGUAGE_QUICK_SETUP.find(
+    (e) =>
+      e.label.toLowerCase().includes(q.toLowerCase()) ||
+      q.toLowerCase().includes(e.label.toLowerCase()) ||
+      q.toLowerCase() === langBase(e.langCode)
+  );
+  if (langEntry) {
+    const code = langEntry.langCode;
+    if (!googleVoices.length) {
+      return (
+        `No ${langEntry.label} voice is installed in your browser. Click the ` +
+        `${langEntry.label} chip under Quick setup — languages (above), then Save. ` +
+        `For natural ${langEntry.label} speech, add GOOGLE_CLOUD_TTS_API_KEY in .env ` +
+        `(see docs/GOOGLE_CLOUD_SETUP.md) or install ${langEntry.label} in Windows Speech settings.`
+      );
+    }
+    return (
+      `No Google/browser voice matched "${q}". Try ${code} in the filter, or click the ` +
+      `${langEntry.label} chip under Quick setup — languages above.`
+    );
+  }
+  if (!googleVoices.length) {
+    return (
+      `No voices matched "${q}". This box only lists browser voices on your PC — ` +
+      `Google voices need GOOGLE_CLOUD_TTS_API_KEY in .env. For a language preset, ` +
+      `use Quick setup — languages above (e.g. Tamil, Hindi), not this filter.`
+    );
+  }
+  return (
+    `No voices matched "${q}". Try a language name (Tamil, Hindi), accent ` +
+    `(United Kingdom), or code (ta-IN, hi-IN). Or pick a Quick setup chip above.`
+  );
 }
 
 function matchesVoiceFilter(q, parts) {
@@ -1913,8 +2059,7 @@ function updateVoiceHint(matchCount = 0) {
   if (!voiceHint) return;
   voiceHint.classList.remove("hidden");
   if (voiceSearchQuery && matchCount === 0) {
-    voiceHint.textContent =
-      `No voices matched "${voiceSearchQuery}". Try United Kingdom, Punjabi, Hindi, or pa-IN.`;
+    voiceHint.textContent = voiceSearchNoMatchHint(voiceSearchQuery);
     return;
   }
   if (googleVoices.length > 0) {
@@ -2451,7 +2596,11 @@ applyAccent(settings.accent || "");
 populateThemeControls();
 populatePresets();
 if (window.speechSynthesis) {
-  loadGoogleVoices().then(() => populateVoices());
+  loadGoogleVoices().then(() => {
+    populateVoices();
+    renderSpeechModeChips();
+    updateGoogleSpeechPipelineHint();
+  });
 }
 if (conversations.length === 0) newConversation();
 renderSidebar();

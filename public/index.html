@@ -188,13 +188,14 @@
           <input type="checkbox" id="translate-for-speech" />
           Translate English replies to voice language when speaking
         </label>
+        <p id="google-speech-pipeline-hint" class="speech-mode-hint hidden"></p>
         <div id="tts-controls">
           <label for="voice-select">Voice (fine-tune after quick setup)</label>
           <input
             id="voice-search"
             class="search-input"
             type="search"
-            placeholder="Filter voices (e.g. Punjabi, Hindi, United Kingdom)..."
+            placeholder="Fine-tune voice list (browser/Google voices only — use language chips above for presets)"
             autocomplete="off"
           />
           <select id="voice-select" class="settings-input voice-select"></select>

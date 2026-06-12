@@ -1,6 +1,6 @@
 # Google Cloud setup (voices + translation)
 
-Use this when you want **Google language voices** (Punjabi, Hindi, all accents) and **translation** (e.g. Punjabi → English for the AI, English → Punjabi for speech).
+Use this when you want **Google voices for all supported languages** (male + female per language), **translation** (your language → English for the AI), and **read-aloud** (English reply → your language in the voice you pick). Works for typing and **microphone** input.
 
 ## What the key enables
 
@@ -52,9 +52,11 @@ In **APIs & Services → Library**, search and enable:
 
 ### 5. Verify
 
-1. Open **Settings** — translation toggles should be **enabled** (not grayed out).
-2. Voice list should include **Google —** groups for many languages.
-3. Optional: run `npm test` — tests report whether Google voices are active.
+1. Open **Settings** — badge should show **Google online**; translation toggles enabled.
+2. Under **Quick setup — languages**, each language should offer **female** and **male** chips (e.g. `Tamil — female`, `Tamil — male`).
+3. Click a chip → **Save** → speak or type in that language; enable **Read aloud** and **Translate** toggles.
+4. Voice dropdown lists **Google —** groups with **Male / Female (Wavenet)** labels.
+5. Optional: run `npm test` — tests report whether Google voices are active.
 
 ## Costs
 
