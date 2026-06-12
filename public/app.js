@@ -58,12 +58,16 @@ const speechModeLanguagesTitle = document.getElementById("speech-mode-languages-
 const speechModeLanguagesHint = document.getElementById("speech-mode-languages-hint");
 const speechModeGoogleStatus = document.getElementById("speech-mode-google-status");
 const googleSpeechPipelineHint = document.getElementById("google-speech-pipeline-hint");
+const translationOptionsHint = document.getElementById("translation-options-hint");
 
 // --- Storage keys ---------------------------------------------------------
 const CONVOS_KEY = "ai_chat_convos";
 const ACTIVE_KEY = "ai_chat_active";
 const SETTINGS_KEY = "ai_chat_settings";
 const THEME_KEY = "ai_chat_theme";
+
+const GOOGLE_VOICES_ADMIN_HINT =
+  "Ask your admin to enable Google voices on the server.";
 
 const WELCOME = "Hi! I'm your AI assistant. Ask me anything to get started.";
 const SUGGESTIONS = [
@@ -1389,23 +1393,24 @@ function langBase(code) {
 
 function updateTranslateSourceRowVisibility() {
   if (!translateSourceRow) return;
-  const show =
-    translateToEnglishInput?.checked && !translateToEnglishInput.disabled;
+  const show = !!translateToEnglishInput?.checked;
   translateSourceRow.classList.toggle("hidden", !show);
 }
 
-function updateTranslationControlsState() {
-  const enabled = googleTranslateEnabled;
-  const controls = [
-    translateToEnglishInput,
-    showTranslationInput,
-    translateForSpeechInput,
-    translateSourceLangSelect,
-  ];
-  for (const el of controls) {
-    if (el) el.disabled = !enabled;
+function updateTranslationOptionsHint() {
+  if (!translationOptionsHint) return;
+  if (!googleTranslateEnabled) {
+    translationOptionsHint.classList.remove("hidden");
+    translationOptionsHint.textContent = GOOGLE_VOICES_ADMIN_HINT;
+  } else {
+    translationOptionsHint.classList.add("hidden");
+    translationOptionsHint.textContent = "";
   }
+}
+
+function updateTranslationControlsState() {
   updateTranslateSourceRowVisibility();
+  updateTranslationOptionsHint();
 }
 
 function collectGoogleLangCodes() {
@@ -1487,15 +1492,9 @@ function syncSettingsWithVoiceSelection() {
   const lang = voiceLangFromName(voiceSelect?.value ?? settings.voiceName);
   const base = langBase(lang);
   if (!base || base === "en") return;
-  if (readAloudInput && !readAloudInput.disabled) readAloudInput.checked = true;
-  if (translateForSpeechInput && !translateForSpeechInput.disabled) {
-    translateForSpeechInput.checked = true;
-  }
-  if (
-    translateSourceLangSelect &&
-    !translateSourceLangSelect.disabled &&
-    translateToEnglishInput?.checked
-  ) {
+  if (readAloudInput) readAloudInput.checked = true;
+  if (translateForSpeechInput) translateForSpeechInput.checked = true;
+  if (translateSourceLangSelect && translateToEnglishInput?.checked) {
     const match = [...translateSourceLangSelect.options].some(
       (o) => o.value === base
     );
@@ -1824,7 +1823,7 @@ function updateSpeechModeLabels() {
   if (speechModeLanguagesHint) {
     speechModeLanguagesHint.textContent = googleCatalogOnline
       ? "Pick female or male for a language, then Save — you speak that language, the AI gets English, replies can be read in that voice."
-      : "These chips set translation and read-aloud options for 25 widely used languages. Google voices and live translation need the server Google key (see docs/GOOGLE_CLOUD_SETUP.md).";
+      : `These chips set translation and read-aloud options for 25 widely used languages. ${GOOGLE_VOICES_ADMIN_HINT}`;
   }
   if (speechModeGoogleStatus) {
     speechModeGoogleStatus.classList.remove("hidden", "online", "offline");
@@ -1963,15 +1962,13 @@ function applySpeechMode(mode) {
     if (translateToEnglishInput) translateToEnglishInput.checked = false;
     if (showTranslationInput) showTranslationInput.checked = false;
     if (translateForSpeechInput) translateForSpeechInput.checked = false;
-    if (translateSourceLangSelect && !translateSourceLangSelect.disabled) {
-      translateSourceLangSelect.value = "";
-    }
+    if (translateSourceLangSelect) translateSourceLangSelect.value = "";
   } else {
     if (readAloudInput) readAloudInput.checked = true;
     if (translateToEnglishInput) translateToEnglishInput.checked = true;
     if (showTranslationInput) showTranslationInput.checked = true;
     if (translateForSpeechInput) translateForSpeechInput.checked = true;
-    if (translateSourceLangSelect && !translateSourceLangSelect.disabled) {
+    if (translateSourceLangSelect) {
       const base = langBase(mode.langCode);
       const match = [...translateSourceLangSelect.options].some(
         (o) => o.value === base
@@ -2001,9 +1998,7 @@ function applySpeechMode(mode) {
       `${mode.label}: translate + speak on — type in ${mode.label}, AI gets English — click Save`
     );
   } else if (!googleTranslateEnabled) {
-    showToast(
-      `${mode.label}: preset ready — click Save (Google voices on server unlock translation and speech)`
-    );
+    showToast(`${mode.label}: preset ready — click Save. ${GOOGLE_VOICES_ADMIN_HINT}`);
   } else {
     showToast(
       `${mode.label}: translate on — pick a matching voice below, then Save`
@@ -2061,8 +2056,7 @@ function voiceSearchNoMatchHint(query) {
       return (
         `No ${langEntry.label} voice is installed in your browser. Click the ` +
         `${langEntry.label} chip under Quick setup — languages (above), then Save. ` +
-        `For natural ${langEntry.label} speech, add GOOGLE_CLOUD_TTS_API_KEY in .env ` +
-        `(see docs/GOOGLE_CLOUD_SETUP.md) or install ${langEntry.label} in Windows Speech settings.`
+        GOOGLE_VOICES_ADMIN_HINT
       );
     }
     return (
@@ -2072,9 +2066,8 @@ function voiceSearchNoMatchHint(query) {
   }
   if (!googleVoices.length) {
     return (
-      `No voices matched "${q}". This box only lists browser voices on your PC — ` +
-      `Google voices need GOOGLE_CLOUD_TTS_API_KEY in .env. For a language preset, ` +
-      `use Quick setup — languages above (e.g. Tamil, Hindi), not this filter.`
+      `No voices matched "${q}". This box only lists browser voices on your PC. ` +
+      `For language presets, use Quick setup — languages above. ${GOOGLE_VOICES_ADMIN_HINT}`
     );
   }
   return (
