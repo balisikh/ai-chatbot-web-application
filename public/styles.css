@@ -907,6 +907,18 @@ textarea#system-prompt {
 .speech-mode-status.hidden {
   display: none;
 }
+.speech-mode-region-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 10px 0 6px;
+  width: 100%;
+}
+.speech-mode-region-label:first-child {
+  margin-top: 0;
+}
 .speech-mode-search {
   margin-bottom: 8px;
   font-size: 0.88rem;

@@ -44,7 +44,10 @@ async function main() {
     const langHint = await page.locator("#speech-mode-languages-hint").innerText();
     check("Language quick-setup hint visible", langHint.length > 10);
     const status = await page.locator("#speech-mode-google-status").innerText();
-    check("Google status badge visible", /offline|online/i.test(status));
+    check(
+      "Google status badge visible",
+      /online|offline|setup/i.test(status)
+    );
     const langCount = await page.locator("#speech-mode-languages .speech-mode-chip").count();
     check("English accent chips rendered", enCount >= 4, `${enCount}`);
     check("Language chips rendered", langCount >= 10, `${langCount}`);

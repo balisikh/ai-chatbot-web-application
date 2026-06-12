@@ -180,34 +180,68 @@ const PUNJABI_VOICE_PREFERENCES = [
   "google:pa-IN-Standard-B",
 ];
 
-// Shown in quick setup even before Google voices load; merged with API catalog when available.
-const LANGUAGE_QUICK_SETUP = [
-  { langCode: "pa-IN", label: "Punjabi", preferredVoiceIds: PUNJABI_VOICE_PREFERENCES },
-  { langCode: "hi-IN", label: "Hindi" },
-  { langCode: "pl-PL", label: "Polish" },
-  { langCode: "pt-BR", label: "Portuguese (Brazil)" },
-  { langCode: "pt-PT", label: "Portuguese (Portugal)" },
-  { langCode: "fr-FR", label: "French" },
-  { langCode: "de-DE", label: "German" },
-  { langCode: "es-ES", label: "Spanish" },
-  { langCode: "it-IT", label: "Italian" },
-  { langCode: "ja-JP", label: "Japanese" },
-  { langCode: "ko-KR", label: "Korean" },
-  { langCode: "zh-CN", label: "Chinese" },
-  { langCode: "ar-XA", label: "Arabic" },
-  { langCode: "ur-PK", label: "Urdu" },
-  { langCode: "bn-IN", label: "Bengali" },
-  { langCode: "gu-IN", label: "Gujarati" },
-  { langCode: "mr-IN", label: "Marathi" },
-  { langCode: "ta-IN", label: "Tamil" },
-  { langCode: "te-IN", label: "Telugu" },
-  { langCode: "nl-NL", label: "Dutch" },
-  { langCode: "sv-SE", label: "Swedish" },
-  { langCode: "tr-TR", label: "Turkish" },
-  { langCode: "vi-VN", label: "Vietnamese" },
-  { langCode: "th-TH", label: "Thai" },
-  { langCode: "ru-RU", label: "Russian" },
+// Popular languages for quick setup before Google loads; merged with full API catalog when online.
+const LANGUAGE_QUICK_SETUP_REGIONS = [
+  { id: "south-asia", label: "South Asia" },
+  { id: "middle-east", label: "Middle East & Turkey" },
+  { id: "east-asia", label: "East Asia" },
+  { id: "southeast-asia", label: "Southeast Asia" },
+  { id: "europe", label: "Europe" },
+  { id: "americas", label: "Americas & Spanish" },
 ];
+
+const LANGUAGE_QUICK_SETUP = [
+  { langCode: "pa-IN", label: "Punjabi", region: "south-asia", preferredVoiceIds: PUNJABI_VOICE_PREFERENCES },
+  { langCode: "hi-IN", label: "Hindi", region: "south-asia" },
+  { langCode: "ur-PK", label: "Urdu", region: "south-asia" },
+  { langCode: "bn-IN", label: "Bengali", region: "south-asia" },
+  { langCode: "gu-IN", label: "Gujarati", region: "south-asia" },
+  { langCode: "mr-IN", label: "Marathi", region: "south-asia" },
+  { langCode: "ta-IN", label: "Tamil", region: "south-asia" },
+  { langCode: "te-IN", label: "Telugu", region: "south-asia" },
+  { langCode: "ar-XA", label: "Arabic", region: "middle-east" },
+  { langCode: "tr-TR", label: "Turkish", region: "middle-east" },
+  { langCode: "zh-CN", label: "Chinese", region: "east-asia" },
+  { langCode: "ja-JP", label: "Japanese", region: "east-asia" },
+  { langCode: "ko-KR", label: "Korean", region: "east-asia" },
+  { langCode: "th-TH", label: "Thai", region: "southeast-asia" },
+  { langCode: "vi-VN", label: "Vietnamese", region: "southeast-asia" },
+  { langCode: "fr-FR", label: "French", region: "europe" },
+  { langCode: "de-DE", label: "German", region: "europe" },
+  { langCode: "it-IT", label: "Italian", region: "europe" },
+  { langCode: "nl-NL", label: "Dutch", region: "europe" },
+  { langCode: "sv-SE", label: "Swedish", region: "europe" },
+  { langCode: "pl-PL", label: "Polish", region: "europe" },
+  { langCode: "ru-RU", label: "Russian", region: "europe" },
+  { langCode: "pt-PT", label: "Portuguese (Portugal)", region: "europe" },
+  { langCode: "es-ES", label: "Spanish", region: "americas" },
+  { langCode: "pt-BR", label: "Portuguese (Brazil)", region: "americas" },
+];
+
+function quickSetupEntryForLang(langCode) {
+  const base = langBase(langCode);
+  return LANGUAGE_QUICK_SETUP.find(
+    (e) => e.langCode === langCode || langBase(e.langCode) === base
+  );
+}
+
+function quickSetupSortIndex(langCode) {
+  const entry = quickSetupEntryForLang(langCode);
+  if (!entry) return 9999;
+  return LANGUAGE_QUICK_SETUP.indexOf(entry);
+}
+
+function sortLanguageModesInRegion(modes) {
+  return modes.sort((a, b) => {
+    const oa = quickSetupSortIndex(a.langCode);
+    const ob = quickSetupSortIndex(b.langCode);
+    if (oa !== ob) return oa - ob;
+    const af = /female/i.test(a.label) ? 0 : /male/i.test(a.label) ? 1 : 2;
+    const bf = /female/i.test(b.label) ? 0 : /male/i.test(b.label) ? 1 : 2;
+    if (af !== bf) return af - bf;
+    return a.label.localeCompare(b.label);
+  });
+}
 
 const TRANSLATE_SOURCE_PRESETS = [
   { code: "", label: "Any non-English language → English" },
@@ -1661,6 +1695,7 @@ function buildNonEnglishSpeechMode(entry, googleGroup, opts = {}) {
     isEnglish: false,
     voiceIds,
     gender: opts.gender || "",
+    region: entry.region || "",
   };
 }
 
@@ -1669,6 +1704,7 @@ function expandLanguageModesFromGroup(g, preset) {
     langCode: g.langCode,
     label: g.label,
     preferredVoiceIds: preset?.preferredVoiceIds,
+    region: preset?.region || "",
   };
   if (!googleCatalogOnline) {
     return [buildNonEnglishSpeechMode(entry, g)];
@@ -1733,8 +1769,9 @@ function buildSpeechModeCatalog() {
       if (!lang || langBase(lang) === "en" || seenCodes.has(lang)) continue;
       seenCodes.add(lang);
       const voices = googleVoices.filter((x) => x.lang === lang);
-      const group = { langCode: lang, label: "", voices };
-      for (const mode of expandLanguageModesFromGroup(group, null)) {
+      const preset = quickSetupEntryForLang(lang);
+      const group = { langCode: lang, label: preset?.label || "", voices };
+      for (const mode of expandLanguageModesFromGroup(group, preset)) {
         languageModes.push(mode);
       }
     }
@@ -1782,38 +1819,81 @@ function updateSpeechModeLabels() {
   if (speechModeLanguagesTitle) {
     speechModeLanguagesTitle.textContent = googleCatalogOnline
       ? `Quick setup — Google languages (${count})`
-      : `Quick setup — languages (offline preview, ${count})`;
+      : `Quick setup — languages (${count} popular)`;
   }
   if (speechModeLanguagesHint) {
     speechModeLanguagesHint.textContent = googleCatalogOnline
-      ? "Each language has female and male Google voices. Click one, then Save: you speak that language → English for the AI → replies read aloud in that voice."
-      : "Limited preview. Add GOOGLE_CLOUD_TTS_API_KEY to .env (Text-to-Speech + Translation APIs), restart the server, then refresh for all languages with male/female voices.";
+      ? "Pick female or male for a language, then Save — you speak that language, the AI gets English, replies can be read in that voice."
+      : "These chips set translation and read-aloud options for 25 widely used languages. Google voices and live translation need the server Google key (see docs/GOOGLE_CLOUD_SETUP.md).";
   }
   if (speechModeGoogleStatus) {
     speechModeGoogleStatus.classList.remove("hidden", "online", "offline");
     speechModeGoogleStatus.textContent = googleCatalogOnline
       ? "Google online"
-      : "Offline preview";
+      : "Setup only";
     speechModeGoogleStatus.classList.add(
       googleCatalogOnline ? "online" : "offline"
     );
   }
 }
 
+function appendLanguageModeChip(parent, mode) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chip speech-mode-chip";
+  btn.textContent = mode.label;
+  btn.addEventListener("click", () => applySpeechMode(mode));
+  parent.appendChild(btn);
+}
+
 function renderLanguageModeChips(query = "") {
   if (!speechModeLanguagesEl) return;
   speechModeLanguagesEl.innerHTML = "";
   const q = query.toLowerCase().trim();
+  const filtered = cachedLanguageModes.filter((mode) =>
+    languageModeMatchesFilter(mode, q)
+  );
   let shown = 0;
-  for (const mode of cachedLanguageModes) {
-    if (!languageModeMatchesFilter(mode, q)) continue;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "chip speech-mode-chip";
-    btn.textContent = mode.label;
-    btn.addEventListener("click", () => applySpeechMode(mode));
-    speechModeLanguagesEl.appendChild(btn);
-    shown++;
+  const useRegions = !q && filtered.some((m) => m.region);
+
+  if (useRegions) {
+    for (const reg of LANGUAGE_QUICK_SETUP_REGIONS) {
+      const modes = sortLanguageModesInRegion(
+        filtered.filter((m) => m.region === reg.id)
+      );
+      if (!modes.length) continue;
+      const heading = document.createElement("div");
+      heading.className = "speech-mode-region-label";
+      heading.textContent = reg.label;
+      speechModeLanguagesEl.appendChild(heading);
+      for (const mode of modes) {
+        appendLanguageModeChip(speechModeLanguagesEl, mode);
+        shown++;
+      }
+    }
+    const other = sortLanguageModesInRegion(
+      filtered.filter(
+        (m) =>
+          !m.region || !LANGUAGE_QUICK_SETUP_REGIONS.some((r) => r.id === m.region)
+      )
+    );
+    if (other.length) {
+      const heading = document.createElement("div");
+      heading.className = "speech-mode-region-label";
+      heading.textContent = googleCatalogOnline
+        ? "More Google languages"
+        : "More languages";
+      speechModeLanguagesEl.appendChild(heading);
+      for (const mode of other) {
+        appendLanguageModeChip(speechModeLanguagesEl, mode);
+        shown++;
+      }
+    }
+  } else {
+    for (const mode of filtered) {
+      appendLanguageModeChip(speechModeLanguagesEl, mode);
+      shown++;
+    }
   }
   if (!shown && cachedLanguageModes.length) {
     const empty = document.createElement("span");
@@ -1922,7 +2002,7 @@ function applySpeechMode(mode) {
     );
   } else if (!googleTranslateEnabled) {
     showToast(
-      `${mode.label}: voice set — add Google API key in .env for translation`
+      `${mode.label}: preset ready — click Save (Google voices on server unlock translation and speech)`
     );
   } else {
     showToast(
