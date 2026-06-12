@@ -1,7 +1,7 @@
 {
   "name": "ai-chatbot-web-application",
   "version": "1.0.0",
-  "description": "A simple AI chatbot web application with a plain HTML/CSS/JS frontend and a Node.js/Express backend powered by OpenAI.",
+  "description": "AI chatbot with HTML/CSS/JS frontend and Node.js/Express backend (Ollama, OpenAI, optional Google voices/translation).",
   "main": "server.js",
   "type": "module",
   "scripts": {
