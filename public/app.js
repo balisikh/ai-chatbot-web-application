@@ -619,7 +619,7 @@ function addMessage(role, text, opts = {}) {
       })
     );
     if (!opts.error && (text || "").trim()) {
-      meta.appendChild(makeSpeakButton(() => bubble.dataset.raw || text));
+      meta.appendChild(makeSpeechControls(() => bubble.dataset.raw || text));
     }
     if (opts.onRetry) {
       const r = makeMetaButton("Retry", "Try again", opts.onRetry);
@@ -1376,12 +1376,112 @@ function applyVoiceSettings(utter) {
     }
   }
 }
+let speechGen = 0;
+const speechSession = {
+  speakBtn: null,
+  pauseBtn: null,
+  mode: null,
+  paused: false,
+};
+
+function setPauseBtnState(btn, state) {
+  if (!btn) return;
+  if (state === "idle") {
+    btn.textContent = "\u25B6";
+    btn.title = "Play";
+    btn.classList.remove("active");
+  } else if (state === "playing") {
+    btn.textContent = "\u23F8";
+    btn.title = "Pause";
+    btn.classList.add("active");
+  } else if (state === "paused") {
+    btn.textContent = "\u25B6";
+    btn.title = "Resume";
+    btn.classList.add("active");
+  }
+}
+
+function isSpeechPlaying() {
+  if (speechSession.paused) return false;
+  if (speechSession.mode === "google" && speakingAudio && !speakingAudio.paused) {
+    return true;
+  }
+  if (
+    speechSession.mode === "browser" &&
+    window.speechSynthesis?.speaking &&
+    !window.speechSynthesis.paused
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function pauseSpeech() {
+  if (speechSession.mode === "google" && speakingAudio) {
+    speakingAudio.pause();
+    speechSession.paused = true;
+    setPauseBtnState(speechSession.pauseBtn, "paused");
+    return;
+  }
+  if (speechSession.mode === "browser" && window.speechSynthesis?.speaking) {
+    window.speechSynthesis.pause();
+    speechSession.paused = true;
+    setPauseBtnState(speechSession.pauseBtn, "paused");
+  }
+}
+
+function resumeSpeech() {
+  if (speechSession.mode === "google" && speakingAudio) {
+    speechSession.paused = false;
+    speakingAudio.play().catch(() => {
+      showToast("Could not resume speech");
+      stopAllSpeech();
+    });
+    setPauseBtnState(speechSession.pauseBtn, "playing");
+    return;
+  }
+  if (speechSession.mode === "browser") {
+    window.speechSynthesis.resume();
+    speechSession.paused = false;
+    setPauseBtnState(speechSession.pauseBtn, "playing");
+  }
+}
+
 function stopAllSpeech() {
+  speechGen += 1;
   window.speechSynthesis?.cancel();
   if (speakingAudio) {
     speakingAudio.pause();
     speakingAudio = null;
   }
+  if (speechSession.speakBtn) resetSpeakBtn(speechSession.speakBtn);
+  if (speechSession.pauseBtn) setPauseBtnState(speechSession.pauseBtn, "idle");
+  speechSession.speakBtn = null;
+  speechSession.pauseBtn = null;
+  speechSession.mode = null;
+  speechSession.paused = false;
+}
+
+function onSpeechStart(speakBtn, pauseBtn) {
+  speechSession.speakBtn = speakBtn;
+  speechSession.pauseBtn = pauseBtn;
+  speechSession.paused = false;
+  if (speakBtn) {
+    speakBtn.textContent = "\u23F9";
+    speakBtn.title = "Stop";
+    speakBtn.classList.add("active");
+  }
+  setPauseBtnState(pauseBtn, "playing");
+}
+
+function onSpeechEnd(speakBtn, pauseBtn) {
+  if (speechSession.speakBtn !== speakBtn) return;
+  resetSpeakBtn(speakBtn);
+  setPauseBtnState(pauseBtn, "idle");
+  speechSession.speakBtn = null;
+  speechSession.pauseBtn = null;
+  speechSession.mode = null;
+  speechSession.paused = false;
 }
 
 async function loadGoogleVoices() {
@@ -2349,13 +2449,23 @@ function populateVoices() {
 }
 
 // Chrome/Edge often ignore speak() if it runs in the same tick as cancel().
-async function playSpeech(text, { onStart, onEnd } = {}) {
+async function playSpeech(text, { speakBtn, pauseBtn, onStart, onEnd } = {}) {
+  const gen = ++speechGen;
   const plain = await prepareSpeechText(text);
+  if (gen !== speechGen) return;
   if (!plain) {
     showToast("Nothing to read aloud");
     onEnd?.();
     return;
   }
+
+  stopAllSpeech();
+  speechGen = gen;
+
+  const finish = () => {
+    onSpeechEnd(speakBtn, pauseBtn);
+    onEnd?.();
+  };
 
   // Google Cloud TTS (real Google Punjabi / English voices).
   if (settings.voiceName?.startsWith("google:")) {
@@ -2371,41 +2481,47 @@ async function playSpeech(text, { onStart, onEnd } = {}) {
         }),
       });
       const data = await res.json();
+      if (gen !== speechGen) return;
       if (!res.ok) throw new Error(data.error || "TTS failed");
-      stopAllSpeech();
       const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
       speakingAudio = audio;
+      speechSession.mode = "google";
+      onSpeechStart(speakBtn, pauseBtn);
       onStart?.();
       audio.onended = () => {
         if (speakingAudio === audio) speakingAudio = null;
-        onEnd?.();
+        finish();
       };
       audio.onerror = () => {
         if (speakingAudio === audio) speakingAudio = null;
         showToast("Could not play Google voice audio");
-        onEnd?.();
+        finish();
       };
       await audio.play();
     } catch (err) {
+      if (gen !== speechGen) return;
       showToast(err.message || "Google voice failed");
-      onEnd?.();
+      finish();
     }
     return;
   }
 
   if (!window.speechSynthesis) {
     showToast("Speech isn't supported in this browser");
-    onEnd?.();
+    finish();
     return;
   }
 
-  stopAllSpeech();
+  speechSession.mode = "browser";
   window.speechSynthesis.getVoices(); // prime voice list (required in some browsers)
   setTimeout(() => {
+    if (gen !== speechGen) return;
     const u = new SpeechSynthesisUtterance(plain);
     applyVoiceSettings(u);
-    u.onstart = () => onStart?.();
-    const finish = () => onEnd?.();
+    u.onstart = () => {
+      onSpeechStart(speakBtn, pauseBtn);
+      onStart?.();
+    };
     u.onend = finish;
     u.onerror = (e) => {
       if (e.error !== "interrupted" && e.error !== "canceled") {
@@ -2417,45 +2533,69 @@ async function playSpeech(text, { onStart, onEnd } = {}) {
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   }, 80);
 }
+
+function startMessageSpeech(speakBtn, pauseBtn, getText) {
+  playSpeech(getText(), { speakBtn, pauseBtn });
+}
+
 function speak(text) {
-  if (!settings.readAloud || !window.speechSynthesis) return;
+  if (!settings.readAloud) return;
+  const wrap = messagesEl.querySelector(
+    ".message.bot:last-child .speech-controls"
+  );
+  if (wrap) {
+    const speakBtn = wrap.querySelector(".speak-btn");
+    const pauseBtn = wrap.querySelector(".pause-btn");
+    startMessageSpeech(speakBtn, pauseBtn, () => text);
+    return;
+  }
   playSpeech(text);
 }
 
-let speakingBtn = null;
 function resetSpeakBtn(btn) {
+  if (!btn) return;
   btn.textContent = "\u{1F50A}";
   btn.title = "Read this reply aloud";
   btn.classList.remove("active");
 }
-function makeSpeakButton(getText) {
-  const btn = document.createElement("button");
-  btn.className = "meta-btn speak-btn";
-  resetSpeakBtn(btn);
-  btn.addEventListener("click", () => {
-    const wasThis = speakingBtn === btn;
+
+function makeSpeechControls(getText) {
+  const wrap = document.createElement("span");
+  wrap.className = "speech-controls";
+
+  const speakBtn = document.createElement("button");
+  speakBtn.className = "meta-btn speak-btn";
+  resetSpeakBtn(speakBtn);
+
+  const pauseBtn = document.createElement("button");
+  pauseBtn.className = "meta-btn pause-btn";
+  setPauseBtnState(pauseBtn, "idle");
+
+  speakBtn.addEventListener("click", () => {
+    const wasThis =
+      speechSession.speakBtn === speakBtn &&
+      (isSpeechPlaying() || speechSession.paused);
     stopAllSpeech();
-    if (speakingBtn) {
-      resetSpeakBtn(speakingBtn);
-      speakingBtn = null;
-    }
-    if (wasThis) return; // second click = stop
-    playSpeech(getText(), {
-      onStart: () => {
-        speakingBtn = btn;
-        btn.textContent = "\u23F9";
-        btn.title = "Stop";
-        btn.classList.add("active");
-      },
-      onEnd: () => {
-        if (speakingBtn === btn) {
-          resetSpeakBtn(btn);
-          speakingBtn = null;
-        }
-      },
-    });
+    if (wasThis) return;
+    startMessageSpeech(speakBtn, pauseBtn, getText);
   });
-  return btn;
+
+  pauseBtn.addEventListener("click", () => {
+    const isThis = speechSession.speakBtn === speakBtn;
+    if (isThis && speechSession.paused) {
+      resumeSpeech();
+      return;
+    }
+    if (isThis && isSpeechPlaying()) {
+      pauseSpeech();
+      return;
+    }
+    startMessageSpeech(speakBtn, pauseBtn, getText);
+  });
+
+  wrap.appendChild(speakBtn);
+  wrap.appendChild(pauseBtn);
+  return wrap;
 }
 
 // --- Scroll-to-bottom + new-messages indicator ----------------------------

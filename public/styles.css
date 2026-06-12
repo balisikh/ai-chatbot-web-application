@@ -1067,6 +1067,11 @@ body[data-theme="rose"] .bubble thead th {
 }
 
 /* Feedback (thumbs) + retry buttons */
+.speech-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .meta-btn.active {
   border-color: var(--accent);
   color: var(--accent);
