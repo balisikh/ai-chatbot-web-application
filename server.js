@@ -832,7 +832,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-app.listen(PORT, async () => {
+async function logStartup() {
   const provider = await detectProvider();
   const label =
     provider === "openai"
@@ -840,7 +840,6 @@ app.listen(PORT, async () => {
       : provider === "ollama"
       ? `Ollama local model (${OLLAMA_MODEL})`
       : "offline demo mode (no AI model connected)";
-  console.log(`AI chatbot running at http://localhost:${PORT}`);
   console.log(`Active AI provider: ${label}`);
   console.log("File attachments: POST /api/attach/extract (PDF, Word, Excel, text)");
   if (GOOGLE_TTS_KEY) {
@@ -852,5 +851,18 @@ app.listen(PORT, async () => {
     } catch (err) {
       console.log("Google TTS key set but voice catalog failed:", err.message);
     }
+  } else {
+    console.log(
+      "Google TTS + Translation: not configured (run npm run verify:google)"
+    );
   }
-});
+}
+
+export default app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`AI chatbot running at http://localhost:${PORT}`);
+    await logStartup();
+  });
+}
