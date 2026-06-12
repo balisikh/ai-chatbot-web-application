@@ -77,7 +77,7 @@ Set `OLLAMA_MODEL=llama3.2:1b` in `.env` if needed.
 npm start
 ```
 
-Open the URL printed in the terminal (default `http://localhost:3657`).
+Open the URL printed in the terminal (default `http://localhost:3567`).
 
 ```bash
 npm run dev    # auto-restart on server.js changes

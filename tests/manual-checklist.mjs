@@ -1,6 +1,6 @@
 /**
  * Manual pre-deploy checklist (automated where possible).
- * Run: node tests/manual-checklist.mjs  (server on default port 3657)
+ * Run: node tests/manual-checklist.mjs  (server on default port 3567)
  * Server must be running. Ollama recommended for chat tests.
  */
 import { chromium } from "playwright";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const PORT = process.env.PORT || "3657";
+const PORT = process.env.PORT || "3567";
 const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 const CHAT_TIMEOUT = Number(process.env.CHAT_TIMEOUT_MS || 90000);
 

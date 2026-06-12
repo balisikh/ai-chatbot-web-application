@@ -1,12 +1,12 @@
 /**
  * Smoke tests — run with: npm test
- * Starts checks against a running server (default http://localhost:3657).
+ * Starts checks against a running server (default http://localhost:3567).
  * Set TEST_BASE_URL or PORT to match your .env.
  */
 import { chromium } from "playwright";
 import JSZip from "jszip";
 
-const PORT = process.env.PORT || "3657";
+const PORT = process.env.PORT || "3567";
 const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 
 let pass = true;
