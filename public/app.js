@@ -49,6 +49,7 @@ const translateToEnglishInput = document.getElementById("translate-to-english");
 const translateSourceRow = document.getElementById("translate-source-row");
 const translateSourceLangSelect = document.getElementById("translate-source-lang");
 const showTranslationInput = document.getElementById("show-translation");
+const replyInUserLanguageInput = document.getElementById("reply-in-user-language");
 const translateForSpeechInput = document.getElementById("translate-for-speech");
 const speechModeEnglishEl = document.getElementById("speech-mode-english");
 const speechModeLanguagesEl = document.getElementById("speech-mode-languages");
@@ -129,6 +130,7 @@ let settings = Object.assign(
     translateToEnglish: false,
     translateSourceLang: "",
     showTranslation: true,
+    replyInUserLanguage: false,
     translateForSpeech: false,
   },
   loadJSON(SETTINGS_KEY, {})
@@ -578,6 +580,12 @@ function addMessage(role, text, opts = {}) {
     bubble.innerHTML = renderMarkdown(text || "");
     bubble.dataset.raw = text || "";
     enhanceCodeBlocks(bubble);
+    if (opts.replyTranslation) {
+      const tr = document.createElement("div");
+      tr.className = "translation-badge";
+      tr.textContent = "English: " + opts.replyTranslation;
+      bubble.appendChild(tr);
+    }
   }
   wrapper.appendChild(bubble);
 
@@ -693,9 +701,16 @@ function renderConversation() {
         onEdit: () => editMessage(i),
       });
     } else {
-      addMessage("bot", msg.content, {
+      const botText = msg.display || msg.content;
+      addMessage("bot", botText, {
         time: msg.t,
         error: msg.error,
+        replyTranslation:
+          settings.showTranslation &&
+          msg.display &&
+          msg.display !== msg.content
+            ? msg.content
+            : null,
         tokens: msg.error ? 0 : estimateTokens(msg.content),
         onRetry: msg.error && !isGenerating ? regenerate : undefined,
         onRegenerate:
@@ -1083,6 +1098,9 @@ async function openSettings() {
   readAloudInput.checked = !!settings.readAloud;
   translateToEnglishInput.checked = !!settings.translateToEnglish;
   showTranslationInput.checked = settings.showTranslation !== false;
+  if (replyInUserLanguageInput) {
+    replyInUserLanguageInput.checked = !!settings.replyInUserLanguage;
+  }
   translateForSpeechInput.checked = !!settings.translateForSpeech;
   if (voiceSearchInput) voiceSearchInput.value = voiceSearchQuery;
   window.speechSynthesis?.getVoices();
@@ -1150,6 +1168,7 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.translateToEnglish = translateToEnglishInput.checked;
   settings.translateSourceLang = translateSourceLangSelect?.value || "";
   settings.showTranslation = showTranslationInput.checked;
+  settings.replyInUserLanguage = replyInUserLanguageInput?.checked || false;
   settings.translateForSpeech = translateForSpeechInput.checked;
   settings.voiceName = voiceSelect.value;
   settings.speechRate = parseFloat(speechRateInput.value) || 1;
@@ -1171,6 +1190,7 @@ resetSettingsBtn.addEventListener("click", () => {
   populateTranslateSourceOptions();
   updateTranslationControlsState();
   showTranslationInput.checked = true;
+  if (replyInUserLanguageInput) replyInUserLanguageInput.checked = false;
   translateForSpeechInput.checked = false;
   voiceSelect.value = "";
   speechRateInput.value = "1";
@@ -1585,10 +1605,25 @@ function speechTranslateTarget(lang) {
   return base;
 }
 
+function replyTranslateTarget() {
+  const fromVoice = speechTranslateTarget(getSelectedVoiceLang());
+  if (fromVoice) return fromVoice;
+  const source = settings.translateSourceLang || "";
+  if (source && langBase(source) !== "en") return langBase(source);
+  return null;
+}
+
 async function prepareSpeechText(text) {
   let plain = toPlainText(text || "").trim();
   if (!plain) return "";
   const target = speechTranslateTarget(getSelectedVoiceLang());
+  if (
+    settings.replyInUserLanguage &&
+    target &&
+    googleTranslateEnabled
+  ) {
+    return plain;
+  }
   if (
     settings.translateForSpeech &&
     target &&
@@ -1835,8 +1870,8 @@ function updateGoogleSpeechPipelineHint() {
   if (googleTranslateEnabled && googleCatalogOnline) {
     googleSpeechPipelineHint.classList.remove("hidden");
     googleSpeechPipelineHint.textContent =
-      "Google active: speak or type your language → translated to English for the AI → " +
-      "English replies can be translated back and read with the female/male voice you pick.";
+      "Google active: type your language → English for the AI → turn on “Show AI replies in my language” " +
+      "to read replies in your language (or use read-aloud with voice translation).";
   } else {
     googleSpeechPipelineHint.classList.add("hidden");
     googleSpeechPipelineHint.textContent = "";
@@ -1857,7 +1892,7 @@ function updateSpeechModeLabels() {
   }
   if (speechModeLanguagesHint) {
     speechModeLanguagesHint.textContent = googleCatalogOnline
-      ? "Pick female or male for a language, then Save — you speak that language, the AI gets English, replies can be read in that voice."
+      ? "Pick female or male for a language, then Save — you speak that language, the AI gets English, replies appear in your language when enabled below."
       : `Pick a language to set translation and read-aloud options. ${googleVoicesSetupHint()}`;
   }
   if (speechModeGoogleStatus) {
@@ -1997,11 +2032,13 @@ function applySpeechMode(mode) {
     if (translateToEnglishInput) translateToEnglishInput.checked = false;
     if (showTranslationInput) showTranslationInput.checked = false;
     if (translateForSpeechInput) translateForSpeechInput.checked = false;
+    if (replyInUserLanguageInput) replyInUserLanguageInput.checked = false;
     if (translateSourceLangSelect) translateSourceLangSelect.value = "";
   } else {
     if (readAloudInput) readAloudInput.checked = true;
     if (translateToEnglishInput) translateToEnglishInput.checked = true;
     if (showTranslationInput) showTranslationInput.checked = true;
+    if (replyInUserLanguageInput) replyInUserLanguageInput.checked = true;
     if (translateForSpeechInput) translateForSpeechInput.checked = true;
     if (translateSourceLangSelect) {
       const base = langBase(mode.langCode);
@@ -2549,16 +2586,52 @@ async function generateReply() {
   } finally {
     if (aborted && full.trim()) full += "\n\n_(stopped)_";
     else if (!full.trim()) full = aborted ? "_(stopped)_" : "(no response)";
+
+    let displayText = full;
+    if (
+      settings.replyInUserLanguage &&
+      googleTranslateEnabled &&
+      !errored &&
+      full.trim() &&
+      bubble
+    ) {
+      const target = replyTranslateTarget();
+      if (target) {
+        try {
+          const data = await translateText(full, target, "en");
+          if (
+            data.translatedText?.trim() &&
+            data.translatedText !== full
+          ) {
+            displayText = data.translatedText;
+            bubble.classList.remove("typing");
+            bubble.innerHTML = renderMarkdown(displayText);
+            bubble.dataset.raw = displayText;
+            enhanceCodeBlocks(bubble);
+            if (settings.showTranslation && displayText !== full) {
+              const tr = document.createElement("div");
+              tr.className = "translation-badge";
+              tr.textContent = "English: " + full;
+              bubble.appendChild(tr);
+            }
+          }
+        } catch (err) {
+          showToast(err.message || "Could not translate reply");
+        }
+      }
+    }
+
     convo.messages.push({
       role: "assistant",
       content: full,
+      display: displayText !== full ? displayText : undefined,
       error: errored || undefined,
       t: new Date().toISOString(),
     });
     saveConvos();
     setGenerating(false);
     renderConversation();
-    if (!aborted) speak(full);
+    if (!aborted) speak(displayText);
     input.focus();
   }
 }

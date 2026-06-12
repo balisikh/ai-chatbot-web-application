@@ -1,11 +1,12 @@
 /**
  * Smoke tests — run with: npm test
- * Starts checks against a running server (default http://localhost:3000).
+ * Starts checks against a running server (default http://localhost:3657).
  * Set TEST_BASE_URL or PORT to match your .env.
  */
 import { chromium } from "playwright";
+import JSZip from "jszip";
 
-const PORT = process.env.PORT || "3000";
+const PORT = process.env.PORT || "3657";
 const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 
 let pass = true;
@@ -70,6 +71,8 @@ async function main() {
 
     const howTo = await page.locator("#speech-mode-how-to").count();
     check("How to use languages help exists", howTo === 1);
+    const replyLangToggle = await page.locator("#reply-in-user-language").count();
+    check("Reply in user language toggle exists", replyLangToggle === 1);
 
     await page.keyboard.press("Escape");
 
@@ -117,6 +120,32 @@ async function main() {
         "Attachment extract returns text",
         attach.text?.includes("smoke attachment"),
         attach.text || ""
+      );
+    }
+
+    const pptxZip = new JSZip();
+    pptxZip.file(
+      "ppt/slides/slide1.xml",
+      "<xml><a:t>PPTX smoke</a:t></xml>"
+    );
+    const pptxBuf = await pptxZip.generateAsync({ type: "nodebuffer" });
+    const pptxRes = await page.request.post(`${BASE}/api/attach/extract`, {
+      multipart: {
+        file: {
+          name: "smoke.pptx",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          buffer: pptxBuf,
+        },
+      },
+    });
+    check("POST /api/attach/extract PPTX", pptxRes.ok(), String(pptxRes.status()));
+    if (pptxRes.ok()) {
+      const pptx = await pptxRes.json();
+      check(
+        "PPTX extract returns text",
+        pptx.text?.includes("PPTX smoke"),
+        pptx.text || ""
       );
     }
 

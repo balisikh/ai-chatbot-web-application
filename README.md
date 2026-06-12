@@ -13,7 +13,8 @@ Secrets stay on the server — never in the browser.
 - **Google + browser voices** — English accents and many languages (incl. Punjabi)
 - **Translation** — your language → English for the AI; English → voice language for speech
 - **Punjabi chat mode** — one-click settings preset in the modal
-- File attachments (PDF, Word `.docx`, Excel, text/code — extracted on the server), regenerate, edit & resend, usage estimates
+- File attachments (PDF, Word `.docx`, PowerPoint `.pptx`, Excel, images via OpenAI vision, text/code — server extraction), regenerate, edit & resend, usage estimates
+- **AI replies in your language** — optional setting (Google Translate); English kept for chat context
 - **26 popular languages** in Settings quick-setup (incl. Spanish Mexico), with in-app “How to use languages” help
 - Responsive layout (phone drawer, tablet, desktop)
 
@@ -76,7 +77,7 @@ Set `OLLAMA_MODEL=llama3.2:1b` in `.env` if needed.
 npm start
 ```
 
-Open the URL printed in the terminal (default `http://localhost:3000`).
+Open the URL printed in the terminal (default `http://localhost:3657`).
 
 ```bash
 npm run dev    # auto-restart on server.js changes

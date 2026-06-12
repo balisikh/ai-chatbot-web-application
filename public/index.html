@@ -70,7 +70,7 @@
             id="attach"
             type="button"
             class="mic-btn"
-            title="Attach PDF, Word, Excel, or text file"
+            title="Attach PDF, Word, PowerPoint, Excel, image, or text file"
             aria-label="Attach file"
           >
             &#128206;
@@ -79,7 +79,7 @@
             id="file-input"
             type="file"
             class="hidden"
-            accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".pdf,.docx,.pptx,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.bmp,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.log,.xml,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/gif,image/webp,image/bmp"
           />
           <button id="mic" type="button" class="mic-btn" title="Speak your message" aria-label="Voice input">
             &#127908;
@@ -163,8 +163,9 @@
               <li>Fine-tune the voice in the dropdown under “Voice”.</li>
             </ol>
             <p>
-              Your message is translated to English for the AI; replies can be read aloud
-              in your language when Google voices are enabled on the server.
+              Your message is translated to English for the AI; turn on
+              <strong>Show AI replies in my language</strong> below to read replies in
+              your language (not just via read-aloud).
             </p>
           </details>
           <input
@@ -197,6 +198,11 @@
         <label class="toggle-row">
           <input type="checkbox" id="show-translation" />
           Show English translation under my messages
+        </label>
+
+        <label class="toggle-row">
+          <input type="checkbox" id="reply-in-user-language" />
+          Show AI replies in my language (not just English)
         </label>
 
         <label class="toggle-row">

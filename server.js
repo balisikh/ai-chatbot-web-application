@@ -6,6 +6,7 @@ import { dirname, join } from "path";
 import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
+import JSZip from "jszip";
 import * as XLSX from "xlsx";
 
 dotenv.config();
@@ -14,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3657;
 
 app.use(express.static(join(__dirname, "public")));
 app.use(express.json());
@@ -45,9 +46,19 @@ function attachmentKindFromFile(file) {
   ) {
     return "excel";
   }
-  if (/\.(pptx|ppt)$/i.test(name)) return "ppt";
-  if (/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(name) || type.startsWith("image/")) {
+  if (
+    type ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    /\.pptx$/i.test(name)
+  ) {
+    return "pptx";
+  }
+  if (/\.ppt$/i.test(name)) return "ppt";
+  if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(name) || type.startsWith("image/")) {
     return "image";
+  }
+  if (/\.(svg|ico)$/i.test(name) || type === "image/svg+xml") {
+    return "unsupported-image";
   }
   if (/\.(mp4|webm|mov|avi|mkv|m4v)$/i.test(name) || type.startsWith("video/")) {
     return "video";
@@ -98,6 +109,71 @@ function extractExcelBuffer(buf) {
   return text;
 }
 
+function imageMimeFromFile(file) {
+  const type = (file.mimetype || "").toLowerCase();
+  if (type.startsWith("image/")) return type;
+  const name = (file.originalname || "").toLowerCase();
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".gif")) return "image/gif";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".bmp")) return "image/bmp";
+  return "image/png";
+}
+
+async function extractPptxBuffer(buf) {
+  const zip = await JSZip.loadAsync(buf);
+  const paths = Object.keys(zip.files)
+    .filter((p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/slide(\d+)/i)?.[1] || "0", 10);
+      const nb = parseInt(b.match(/slide(\d+)/i)?.[1] || "0", 10);
+      return na - nb;
+    });
+  let text = "";
+  for (const path of paths) {
+    const xml = await zip.file(path).async("string");
+    const bits = [];
+    for (const m of xml.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)) {
+      if (m[1]) bits.push(m[1]);
+    }
+    if (bits.length) text += bits.join(" ") + "\n";
+  }
+  return text.trim();
+}
+
+async function describeImageBuffer(buf, mime) {
+  if (!openai) {
+    throw new Error(
+      "Image description needs OPENAI_API_KEY on the server (vision). Describe the image in your message, or attach a PDF."
+    );
+  }
+  const base64 = buf.toString("base64");
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "Describe this image for a chat assistant. Include all visible text (OCR). Be clear and concise.",
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:${mime};base64,${base64}` },
+          },
+        ],
+      },
+    ],
+    max_tokens: 1024,
+  });
+  const desc = response.choices?.[0]?.message?.content?.trim();
+  if (!desc) throw new Error("Could not describe this image");
+  return `[Image description]\n${desc}`;
+}
+
 async function extractAttachmentBuffer(file) {
   const kind = attachmentKindFromFile(file);
   const buf = file.buffer;
@@ -112,14 +188,18 @@ async function extractAttachmentBuffer(file) {
       );
     case "excel":
       return extractExcelBuffer(buf);
+    case "pptx":
+      return await extractPptxBuffer(buf);
     case "ppt":
       throw new Error(
-        "PowerPoint is not supported yet — export slides to PDF or paste the text"
+        "Old PowerPoint .ppt is not supported — save as .pptx or export to PDF"
+      );
+    case "unsupported-image":
+      throw new Error(
+        "SVG/ICO images are not supported — use PNG, JPEG, GIF, or WebP"
       );
     case "image":
-      throw new Error(
-        "Images are not read as text — describe the image in your message or attach a PDF"
-      );
+      return await describeImageBuffer(buf, imageMimeFromFile(file));
     case "video":
       throw new Error(
         "Video files cannot be read as text — describe what you need in your message"
@@ -130,7 +210,7 @@ async function extractAttachmentBuffer(file) {
       const asText = buf.toString("utf8");
       if (asText && !asText.includes("\0")) return asText;
       throw new Error(
-        "Unsupported file — use PDF, Word (.docx), Excel (.xlsx), or plain text"
+        "Unsupported file — use PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), image (PNG/JPEG), or plain text"
       );
   }
 }
@@ -841,7 +921,12 @@ async function logStartup() {
       ? `Ollama local model (${OLLAMA_MODEL})`
       : "offline demo mode (no AI model connected)";
   console.log(`Active AI provider: ${label}`);
-  console.log("File attachments: POST /api/attach/extract (PDF, Word, Excel, text)");
+  console.log(
+    "File attachments: POST /api/attach/extract (PDF, Word, PPTX, Excel, images, text)"
+  );
+  if (openai) {
+    console.log("Image attachments: vision via OpenAI (" + OPENAI_MODEL + ")");
+  }
   if (GOOGLE_TTS_KEY) {
     try {
       const catalog = await fetchGoogleVoiceCatalog();

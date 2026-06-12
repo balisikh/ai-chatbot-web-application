@@ -24,12 +24,12 @@ jobs:
 
       - name: Start server and run smoke tests
         run: |
-          PORT=3999 node server.js &
+          PORT=3657 node server.js &
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:3999/ > /dev/null; then
+            if curl -sf http://localhost:3657/ > /dev/null; then
               break
             fi
             sleep 1
           done
-          curl -sf http://localhost:3999/ > /dev/null || (echo "Server failed to start" && exit 1)
-          PORT=3999 TEST_BASE_URL=http://localhost:3999 npm test
+          curl -sf http://localhost:3657/ > /dev/null || (echo "Server failed to start" && exit 1)
+          PORT=3657 TEST_BASE_URL=http://localhost:3657 npm test

@@ -1,6 +1,6 @@
 /**
  * Manual pre-deploy checklist (automated where possible).
- * Run: PORT=3567 node tests/manual-checklist.mjs
+ * Run: node tests/manual-checklist.mjs  (server on default port 3657)
  * Server must be running. Ollama recommended for chat tests.
  */
 import { chromium } from "playwright";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const PORT = process.env.PORT || "3000";
+const PORT = process.env.PORT || "3657";
 const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 const CHAT_TIMEOUT = Number(process.env.CHAT_TIMEOUT_MS || 90000);
 
@@ -255,11 +255,15 @@ async function main() {
         },
       },
     });
-    if (imgRes.status() === 400) {
+    if (imgRes.ok()) {
+      const j = await imgRes.json();
+      if (j.text?.includes("Image")) ok("Image described via vision API");
+      else bad("Image extract text unexpected", j.text?.slice(0, 80));
+    } else if (imgRes.status() === 400) {
       const err = (await imgRes.json()).error || "";
-      if (/image/i.test(err)) ok("Image rejected with clear message");
+      if (/openai|image/i.test(err)) ok("Image rejected with clear message (no vision key)");
       else bad("Image error message", err);
-    } else bad("Image should return 400");
+    } else bad("Image attach API", String(imgRes.status()));
 
     you("UI attach — use paperclip in browser for a real PDF/docx/xlsx from your PC");
 

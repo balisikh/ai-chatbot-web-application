@@ -219,11 +219,14 @@ These interactive/UX features have been built on top of the core app.
   or message content.
 - **Edit & resend** — an Edit button on any of your messages reloads it into the
   input and truncates the chat from that point, so you can re-ask.
-- **File/document upload** — attach PDF, Word (`.docx`), Excel (`.xlsx`/`.xls`),
-  or plain text/code (`.txt`, `.md`, `.csv`, `.json`, etc.). Text is extracted
-  on the server via `POST /api/attach/extract` (`pdf-parse`, `mammoth`, `xlsx`)
-  and sent as context (large files are truncated). Legacy `.doc`, PowerPoint,
-  and images are not supported yet.
+- **File/document upload** — attach PDF, Word (`.docx`), PowerPoint (`.pptx`),
+  Excel (`.xlsx`/`.xls`), images (PNG/JPEG/GIF/WebP via OpenAI vision when
+  `OPENAI_API_KEY` is set), or plain text/code. Extracted on the server via
+  `POST /api/attach/extract` and sent as context (large files truncated).
+  Legacy `.doc` / `.ppt` and SVG/ICO are not supported.
+- **Replies in user language** — optional setting translates assistant replies
+  from English to the voice/source language for display and TTS; English
+  `content` is kept for follow-up API context.
 - **Themes & accent colors** — six color themes (Dark, Light, Midnight, Forest,
   Solar, Rose) selectable in Settings or by cycling with the header button, plus
   a custom accent-color picker. Choices persist between visits.
