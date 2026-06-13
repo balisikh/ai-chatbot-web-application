@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
+import { parseOffice } from "officeparser";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import OpenAI from "openai";
@@ -18,7 +20,24 @@ const app = express();
 const PORT = process.env.PORT || 3567;
 
 app.use(express.static(join(__dirname, "public")));
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+
+const chatLimiter = rateLimit({
+  windowMs:
+    (Number.parseInt(process.env.CHAT_RATE_WINDOW_MIN, 10) || 15) * 60 * 1000,
+  max: Number.parseInt(process.env.CHAT_RATE_MAX, 10) || 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many chat requests. Please wait and try again." },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.parseInt(process.env.API_RATE_MAX, 10) || 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+});
 
 const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
 const ATTACH_MAX_CHARS = 30000;
@@ -54,11 +73,10 @@ function attachmentKindFromFile(file) {
     return "pptx";
   }
   if (/\.ppt$/i.test(name)) return "ppt";
+  if (/\.svg$/i.test(name) || type === "image/svg+xml") return "svg";
+  if (/\.ico$/i.test(name)) return "unsupported-image";
   if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(name) || type.startsWith("image/")) {
     return "image";
-  }
-  if (/\.(svg|ico)$/i.test(name) || type === "image/svg+xml") {
-    return "unsupported-image";
   }
   if (/\.(mp4|webm|mov|avi|mkv|m4v)$/i.test(name) || type.startsWith("video/")) {
     return "video";
@@ -174,6 +192,38 @@ async function describeImageBuffer(buf, mime) {
   return `[Image description]\n${desc}`;
 }
 
+async function extractOfficeLegacyBuffer(buf) {
+  const result = await parseOffice(buf);
+  if (typeof result === "string") return result;
+  if (result?.text) return result.text;
+  if (typeof result?.toText === "function") return result.toText();
+  return String(result ?? "");
+}
+
+function extractSvgBuffer(buf) {
+  const raw = buf.toString("utf8");
+  const chunks = [];
+  for (const m of raw.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/gi)) {
+    const inner = m[1].replace(/<[^>]+>/g, " ").trim();
+    if (inner) chunks.push(inner);
+  }
+  for (const m of raw.matchAll(/<tspan[^>]*>([\s\S]*?)<\/tspan>/gi)) {
+    const inner = m[1].replace(/<[^>]+>/g, " ").trim();
+    if (inner) chunks.push(inner);
+  }
+  let text = chunks.join(" ").replace(/\s+/g, " ").trim();
+  if (!text) {
+    text = raw
+      .replace(/<script[\s>][\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s>][\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  if (!text) throw new Error("No readable text in this SVG");
+  return `[SVG content]\n${text}`;
+}
+
 async function extractAttachmentBuffer(file) {
   const kind = attachmentKindFromFile(file);
   const buf = file.buffer;
@@ -183,21 +233,17 @@ async function extractAttachmentBuffer(file) {
     case "docx":
       return await extractDocxBuffer(buf);
     case "doc":
-      throw new Error(
-        "Old Word .doc is not supported — save as .docx or export to PDF"
-      );
+      return await extractOfficeLegacyBuffer(buf);
     case "excel":
       return extractExcelBuffer(buf);
     case "pptx":
       return await extractPptxBuffer(buf);
     case "ppt":
-      throw new Error(
-        "Old PowerPoint .ppt is not supported — save as .pptx or export to PDF"
-      );
+      return await extractOfficeLegacyBuffer(buf);
+    case "svg":
+      return extractSvgBuffer(buf);
     case "unsupported-image":
-      throw new Error(
-        "SVG/ICO images are not supported — use PNG, JPEG, GIF, or WebP"
-      );
+      throw new Error("ICO images are not supported — use PNG, JPEG, or SVG");
     case "image":
       return await describeImageBuffer(buf, imageMimeFromFile(file));
     case "video":
@@ -210,7 +256,7 @@ async function extractAttachmentBuffer(file) {
       const asText = buf.toString("utf8");
       if (asText && !asText.includes("\0")) return asText;
       throw new Error(
-        "Unsupported file — use PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), image (PNG/JPEG), or plain text"
+        "Unsupported file — use PDF, Word, PowerPoint, Excel, images, SVG, or plain text"
       );
   }
 }
@@ -718,7 +764,7 @@ app.get("/api/speech/voices", async (req, res) => {
   }
 });
 
-app.post("/api/translate", async (req, res) => {
+app.post("/api/translate", apiLimiter, async (req, res) => {
   if (!GOOGLE_TTS_KEY) {
     return res.status(503).json({
       error:
@@ -761,7 +807,7 @@ app.post("/api/translate", async (req, res) => {
   }
 });
 
-app.post("/api/speech/synthesize", async (req, res) => {
+app.post("/api/speech/synthesize", apiLimiter, async (req, res) => {
   if (!GOOGLE_TTS_KEY) {
     return res.status(503).json({
       error:
@@ -815,7 +861,7 @@ app.post("/api/speech/synthesize", async (req, res) => {
   }
 });
 
-app.post("/api/attach/extract", (req, res) => {
+app.post("/api/attach/extract", apiLimiter, (req, res) => {
   attachUpload.single("file")(req, res, async (uploadErr) => {
     if (uploadErr) {
       const msg =
@@ -847,7 +893,7 @@ app.post("/api/attach/extract", (req, res) => {
   });
 });
 
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", chatLimiter, async (req, res) => {
   const { messages, model, systemPrompt, temperature, maxTokens } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return res
@@ -922,7 +968,14 @@ async function logStartup() {
       : "offline demo mode (no AI model connected)";
   console.log(`Active AI provider: ${label}`);
   console.log(
-    "File attachments: POST /api/attach/extract (PDF, Word, PPTX, Excel, images, text)"
+    "File attachments: POST /api/attach/extract (PDF, Word, PPTX, PPT, DOC, Excel, images, SVG, text)"
+  );
+  console.log(
+    "Rate limits: /api/chat max " +
+      (process.env.CHAT_RATE_MAX || 40) +
+      " per " +
+      (process.env.CHAT_RATE_WINDOW_MIN || 15) +
+      " min"
   );
   if (openai) {
     console.log("Image attachments: vision via OpenAI (" + OPENAI_MODEL + ")");

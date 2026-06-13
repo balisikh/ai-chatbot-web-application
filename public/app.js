@@ -2661,6 +2661,24 @@ sendBtn.addEventListener("click", (e) => {
 });
 
 // --- Core: stream a reply -------------------------------------------------
+function buildSystemPromptForChat() {
+  let prompt =
+    settings.systemPrompt?.trim() ||
+    PRESETS[settings.preset] ||
+    PRESETS["Default assistant"];
+  if (settings.replyInUserLanguage && !googleTranslateEnabled) {
+    const target = replyTranslateTarget();
+    if (target) {
+      const label =
+        formatDetectedLanguageLabel(target) || languageLabel(target) || target;
+      prompt +=
+        `\n\nAlways write every reply in ${label} (language code: ${target}). ` +
+        "Use that language even if the user writes in another language.";
+    }
+  }
+  return prompt.trim();
+}
+
 async function generateReply() {
   const convo = getActive();
   const payloadMessages = convo.messages.map((m) => ({
@@ -2687,7 +2705,7 @@ async function generateReply() {
       body: JSON.stringify({
         messages: payloadMessages,
         model: settings.model || undefined,
-        systemPrompt: settings.systemPrompt || undefined,
+        systemPrompt: buildSystemPromptForChat(),
         temperature:
           typeof settings.temperature === "number" ? settings.temperature : undefined,
         maxTokens: settings.maxTokens > 0 ? settings.maxTokens : undefined,

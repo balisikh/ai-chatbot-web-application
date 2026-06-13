@@ -17,6 +17,11 @@ Secrets stay on the server — never in the browser.
 - **AI replies in your language** — optional setting (Google Translate); English kept for chat context
 - **26 popular languages** in Settings quick-setup (incl. Spanish Mexico), with in-app “How to use languages” help
 - Responsive layout (phone drawer, tablet, desktop)
+- **Rate limiting** on chat API for public deploys
+- **Legacy attachments:** `.doc`, `.ppt`, SVG (plus PDF, Office, images)
+- Chat history in the **browser** (`localStorage`)
+
+See [docs/FEATURES.md](docs/FEATURES.md) for full feature reference.
 
 ## How it works
 
@@ -39,7 +44,8 @@ ai-chatbot-web-application/
 ├── tests/smoke.mjs      # Automated smoke tests (also run in GitHub Actions on push)
 ├── docs/
 │   ├── GOOGLE_CLOUD_SETUP.md
-│   └── DEPLOY.md
+│   ├── DEPLOY.md
+│   └── FEATURES.md
 ├── .env.example
 └── package.json
 ```

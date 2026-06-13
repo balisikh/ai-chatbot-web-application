@@ -16,3 +16,6 @@ Thumbs.db
 test-screenshots/
 playwright-report/
 test-results/
+
+# Local database (accounts + server chat history)
+data/
